@@ -13,6 +13,7 @@ import (
 	"net"
 	"os"
 	"regexp"
+        "runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -534,14 +535,18 @@ func (r *RTTMonitor) pcapSetup() {
 	}
 	defer inactive.CleanUp()
 
-	// probably works best on linux
-	if err = inactive.SetImmediateMode(true); err != nil {
-		log.Printf("Couldn't set pcap immediate mode\n")
-	}
-
 	// works best on darwin
-	if err = inactive.SetTimeout(1 * time.Millisecond); err != nil {
-		log.Printf("Couldn't set minimal timeout on read\n")
+        var tmo time.Duration = time.Millisecond
+        if runtime.GOOS == "linux" {
+            tmo *= 100
+        } else if runtime.GOOS == "darwin" {
+           tmo *= 1
+        }
+        if r.verbose {
+        log.Printf("RTTMonitor setting pcap timeout to %v\n", tmo)
+        }
+	if err = inactive.SetTimeout(tmo); err != nil {
+		log.Printf("couldn't set timeout to %v on read: %v", tmo, err)
 	}
 
 	if err = inactive.SetSnapLen(128); err != nil {
@@ -552,27 +557,17 @@ func (r *RTTMonitor) pcapSetup() {
 		log.Fatal(err)
 	}
 
-	tstypes := inactive.SupportedTimestamps()
-	// fmt.Println(tstypes)
-	var ts pcap.TimestampSource
-	if len(tstypes) > 0 {
-		ts = tstypes[0]
-		if err = inactive.SetTimestampSource(ts); err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Using pcap timestamp source %v\n", ts)
-	} else {
-		fmt.Printf("Using default pcap timestamp source\n")
-	}
-
-	// Finally, create the actual handle by calling Activate:
+        tssources := inactive.SupportedTimestamps()
+        if r.verbose {
+            log.Printf("RTTMonitor supported timestamps: %v\n", tssources)
+        }
 	handle, err := inactive.Activate() // after this, inactive is no longer valid
 	if err != nil {
-		log.Fatal(err)
-	}
-	r.pcapHandle = handle
+            log.Fatalf("%v: %v", err, inactive.Error())
+        }
 
-	if err = handle.SetBPFFilter("icmp or icmp6"); err != nil {
+        r.pcapHandle = handle
+	if err = r.pcapHandle.SetBPFFilter("icmp or icmp6"); err != nil {
 		log.Fatal(err)
 	}
 }
