@@ -76,7 +76,7 @@ func (c *CPUMonitor) Run() error {
 				}
 				cpuidle := make(map[string]float64)
 				for i, pval := range cpuval {
-					cpuidle[fmt.Sprintf("cpu%d_idle", i)] = 1.0 - pval
+					cpuidle[fmt.Sprintf("cpu%d_idle", i)] = 100.0 - pval
 				}
 				c.mutex.Lock()
 				c.metadata = append(c.metadata, CPUMetadata{t, cpuidle})
