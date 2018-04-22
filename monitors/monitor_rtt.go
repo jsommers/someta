@@ -599,7 +599,7 @@ func (r *RTTMonitor) pcapSetup() {
 
 	var tmo = time.Millisecond
 	if runtime.GOOS == "linux" {
-		tmo *= 1
+		tmo *= 100
 	} else if runtime.GOOS == "darwin" {
 		tmo *= 1
 	}
