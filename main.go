@@ -22,6 +22,7 @@ var verboseOutput = false
 var quietOutput = false
 var logfileOutput = false
 var monitorRegex = regexp.MustCompile(`^([a-z]+)(:.+)*`)
+var debugOutput = false
 
 type monitorConfig struct {
 	cfg map[string](map[string]string)
@@ -75,6 +76,7 @@ func init() {
 	flag.StringVar(&commandLine, "c", "", "Command line for external measurement program")
 	flag.BoolVar(&verboseOutput, "v", false, "Verbose output")
 	flag.BoolVar(&quietOutput, "q", false, "Quiet output")
+	flag.BoolVar(&debugOutput, "d", false, "Debug output (metadata is written to stdout)")
 	flag.BoolVar(&logfileOutput, "l", false, "Send logging messages to a file (by default, they go to stdout)")
 	flag.StringVar(&outfileBase, "f", "metadata", "Output file basename; current date/time is included as part of the filename")
 	flag.DurationVar(&statusInterval, "u", 5*time.Second, "Time interval on which to show periodic status while running")
@@ -157,13 +159,21 @@ func main() {
 		log.Fatalln("No monitors configured; exiting.")
 	}
 
+	log.Printf("Starting metadata measurement with verbose %v and command <%s>\n", verboseOutput, commandLine)
+
 	// open metadata output
-	metaOut, err := os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
+	var encoder *json.Encoder
+	if !debugOutput {
+		metaOut, err := os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer metaOut.Close()
+		encoder = json.NewEncoder(metaOut)
+	} else {
+		encoder = json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
 	}
-	defer metaOut.Close()
-	encoder := json.NewEncoder(metaOut)
 
 	sysinfo := make(map[string]interface{})
 	sysinfo["os"] = getSystemInfo()
@@ -171,6 +181,8 @@ func main() {
 	sysinfo["version"] = sometaVersion
 	var start = time.Now()
 	sysinfo["start"] = start
+	syscpuInfo, _ := cpu.Info()
+	sysinfo["syscpu"] = syscpuInfo
 	md := someta.MonitorMetadata{Name: "someta", Type: "system", Data: sysinfo}
 
 	// start monitors
@@ -181,9 +193,6 @@ func main() {
 	cmdOutput := make(chan string)
 	go func() {
 		cmdarr := strings.Split(commandLine, " ")
-		if !quietOutput {
-			log.Printf("Starting command <%s>\n", commandLine)
-		}
 		cmd := exec.Command(cmdarr[0], cmdarr[1:]...)
 		var outbuf bytes.Buffer
 		cmd.Stdout = &outbuf
@@ -206,9 +215,11 @@ func main() {
 			sysinfo["command_output"] = output
 			done = true
 		case t := <-statusTicker.C:
-			cpupct, _ := cpu.Percent(0, false)
-			diff := t.Sub(start)
-			log.Printf("after %v cpu idle %3.2f%%\n", diff.Round(time.Second), 100-cpupct[0])
+			if !quietOutput {
+				cpupct, _ := cpu.Percent(0, false)
+				diff := t.Sub(start)
+				log.Printf("after %v cpu idle %3.2f%%\n", diff.Round(time.Second), 100-cpupct[0])
+			}
 		}
 	}
 
@@ -219,8 +230,11 @@ func main() {
 	log.Println("Waiting for monitors to stop")
 	waiter.Wait()
 
-	sysinfo["end"] = time.Now()
 	// write out metadata
+	sysinfo["end"] = time.Now()
 	encoder.Encode(md)
 	flushMonitorMetadata(encoder)
+	if verboseOutput {
+		log.Println("done")
+	}
 }
