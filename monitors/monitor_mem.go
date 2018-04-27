@@ -13,26 +13,25 @@ func init() {
 	monitorRegistry["mem"] = &MemoryMonitor{}
 }
 
-type memoryMetadata struct {
-	timestamp time.Time
-	memory    *mem.VirtualMemoryStat
+// MemoryMetadata encapsulates what it says
+type MemoryMetadata struct {
+	Timestamp time.Time             `json:"timestamp"`
+	Memory    mem.VirtualMemoryStat `json:"memory"`
 }
 
 // MemoryMonitor collects memory usage metadata
 type MemoryMonitor struct {
 	stop     chan struct{}
-	metadata []memoryMetadata
+	metadata []MemoryMetadata
 	name     string
 	verbose  bool
-	debug    bool
 	mutex    sync.Mutex
 }
 
 // Init initialize a MemoryMonitor
-func (m *MemoryMonitor) Init(name string, verbose bool, debug bool, config map[string]string) error {
+func (m *MemoryMonitor) Init(name string, verbose bool, config map[string]string) error {
 	m.name = name
 	m.verbose = verbose
-	m.debug = debug
 	m.stop = make(chan struct{})
 	if len(config) > 0 {
 		return fmt.Errorf("%s monitor: no configuration is expected", name)
@@ -43,21 +42,26 @@ func (m *MemoryMonitor) Init(name string, verbose bool, debug bool, config map[s
 // Run runs the memory monitor; this should be invoked in a goroutine
 func (m *MemoryMonitor) Run(interval time.Duration) error {
 	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-m.stop:
-			fmt.Printf("%s stopping\n", m.name)
-			break
+			if m.verbose {
+				fmt.Printf("%s stopping\n", m.name)
+			}
+			return nil
 		case t := <-ticker.C:
 			memval, err := mem.VirtualMemory()
 			if err != nil {
 				log.Printf("%s: %v\n", m.name, err)
 			} else {
-				if m.debug || m.verbose {
-					log.Printf("%s: %v\n", m.name, memval)
-				}
+				/*
+					if m.verbose {
+						log.Printf("%s: %v\n", m.name, memval)
+					}
+				*/
 				m.mutex.Lock()
-				m.metadata = append(m.metadata, memoryMetadata{t, memval})
+				m.metadata = append(m.metadata, MemoryMetadata{t, *memval})
 				m.mutex.Unlock()
 			}
 		}
@@ -70,10 +74,12 @@ func (m *MemoryMonitor) Stop() {
 }
 
 // Flush will write any current metadata to the writer
-func (m *MemoryMonitor) Flush(encoder json.Encoder) error {
+func (m *MemoryMonitor) Flush(encoder *json.Encoder) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	err := encoder.Encode(m.metadata)
+	var md = MonitorMetadata{Name: m.name, Type: "monitor", Data: m.metadata}
+	err := encoder.Encode(md)
+	m.metadata = nil
 	if err != nil {
 		return err
 	}

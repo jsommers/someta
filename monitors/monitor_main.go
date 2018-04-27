@@ -7,10 +7,17 @@ import (
 
 // MetadataGenerator is the interface that all metadata sources must adhere to
 type MetadataGenerator interface {
-	Init(string, bool, bool, map[string]string) error
+	Init(string, bool, map[string]string) error
 	Run(time.Duration) error
 	Stop()
-	Flush(json.Encoder) error
+	Flush(*json.Encoder) error
+}
+
+// MonitorMetadata encapsulates metadata collected by a specific monitor
+type MonitorMetadata struct {
+	Name string      `json:"name"`
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
 }
 
 var monitorRegistry map[string]MetadataGenerator

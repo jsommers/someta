@@ -6,18 +6,19 @@ import (
 	"flag"
 	"fmt"
 	someta "github.com/jsommers/someta/monitors"
+	"github.com/shirou/gopsutil/cpu"
 	"log"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
 const sometaVersion = "2018.04"
 
 var verboseOutput = false
-var debugOutput = false
 var quietOutput = false
 var logfileOutput = false
 var monitorRegex = regexp.MustCompile(`^([a-z]+)(:.+)*`)
@@ -57,7 +58,6 @@ func (m *monitorConfig) Set(val string) error {
 		mc[kvitem[0]] = val
 	}
 	m.cfg[name] = mc
-	fmt.Println(name, mc)
 	return nil
 }
 
@@ -68,12 +68,12 @@ var warmCool = 1 * time.Second
 var cpuAffinity = -1
 var monCfg = &monitorConfig{}
 var monitors map[string](*someta.MetadataGenerator)
+var waiter = &sync.WaitGroup{}
 
 func init() {
 	monCfg.cfg = make(map[string](map[string]string))
 	flag.StringVar(&commandLine, "c", "", "Command line for external measurement program")
 	flag.BoolVar(&verboseOutput, "v", false, "Verbose output")
-	flag.BoolVar(&debugOutput, "d", false, "Debugging (really verbose) output")
 	flag.BoolVar(&quietOutput, "q", false, "Quiet output")
 	flag.BoolVar(&logfileOutput, "l", false, "Send logging messages to a file (by default, they go to stdout)")
 	flag.StringVar(&outfileBase, "f", "metadata", "Output file basename; current date/time is included as part of the filename")
@@ -93,6 +93,38 @@ func getSystemInfo() string {
 		log.Fatal(err)
 	}
 	return outbuf.String()
+}
+
+func startMonitors() {
+	for mName, mon := range monitors {
+		var monitor = mon
+		if verboseOutput {
+			log.Printf("Starting monitor %s\n", mName)
+		}
+		go func() {
+			waiter.Add(1)
+			(*monitor).Run(time.Second)
+			waiter.Done()
+		}()
+	}
+}
+
+func stopMonitors() {
+	for mName, mon := range monitors {
+		if verboseOutput {
+			log.Printf("Stopping monitor %s\n", mName)
+		}
+		(*mon).Stop()
+	}
+}
+
+func flushMonitorMetadata(encoder *json.Encoder) {
+	for mName, mon := range monitors {
+		if verboseOutput {
+			log.Printf("Flushing monitor %s\n", mName)
+		}
+		(*mon).Flush(encoder)
+	}
 }
 
 func fileBase() string {
@@ -117,7 +149,7 @@ func main() {
 
 	for mName, mCfg := range monCfg.cfg {
 		mon := someta.GetMonitor(mName)
-		(*mon).Init(mName, verboseOutput, debugOutput, mCfg)
+		(*mon).Init(mName, verboseOutput, mCfg)
 		monitors[mName] = mon
 	}
 
@@ -137,9 +169,12 @@ func main() {
 	sysinfo["os"] = getSystemInfo()
 	sysinfo["command"] = commandLine
 	sysinfo["version"] = sometaVersion
-	sysinfo["start"] = time.Now()
+	var start = time.Now()
+	sysinfo["start"] = start
+	md := someta.MonitorMetadata{Name: "someta", Type: "system", Data: sysinfo}
 
 	// start monitors
+	startMonitors()
 
 	time.Sleep(warmCool)
 
@@ -168,18 +203,24 @@ func main() {
 	for !done {
 		select {
 		case output := <-cmdOutput:
-			fmt.Println(output)
+			sysinfo["command_output"] = output
 			done = true
 		case t := <-statusTicker.C:
-			fmt.Println("Status: ", t)
+			cpupct, _ := cpu.Percent(0, false)
+			diff := t.Sub(start)
+			log.Printf("after %v cpu idle %3.2f%%\n", diff.Round(time.Second), 100-cpupct[0])
 		}
 	}
 
 	time.Sleep(warmCool)
 
 	// shut down monitors
-	sysinfo["end"] = time.Now()
-	encoder.Encode(sysinfo)
+	stopMonitors()
+	log.Println("Waiting for monitors to stop")
+	waiter.Wait()
 
+	sysinfo["end"] = time.Now()
 	// write out metadata
+	encoder.Encode(md)
+	flushMonitorMetadata(encoder)
 }
