@@ -23,12 +23,12 @@ type NetstatMetadata struct {
 
 // NetstatMonitor collects network interface countesr metadata
 type NetstatMonitor struct {
-	stop     chan struct{}
-	metadata []NetstatMetadata
-	name     string
-	verbose  bool
-	mutex    sync.Mutex
-	devnames []string
+	stop            chan struct{}
+	metadata        []NetstatMetadata
+	name            string
+	verbose         bool
+	mutex           sync.Mutex
+	ifacesMonitored []string
 }
 
 // Init initializes a NetstatMonitor
@@ -36,12 +36,12 @@ func (n *NetstatMonitor) Init(name string, verbose bool, config map[string]strin
 	n.name = name
 	n.verbose = verbose
 	n.stop = make(chan struct{})
-	intf, err := net.Interfaces()
+	ifaces, err := net.Interfaces()
 	if err != nil {
 		log.Fatal(err)
 	}
 	var allintf []string
-	for _, netdev := range intf {
+	for _, netdev := range ifaces {
 		allintf = append(allintf, netdev.Name)
 	}
 	sort.Strings(allintf)
@@ -51,9 +51,23 @@ func (n *NetstatMonitor) Init(name string, verbose bool, config map[string]strin
 		if idx == len(allintf) || allintf[idx] != devname {
 			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", n.name, devname, strings.Join(allintf, ","))
 		}
-		n.devnames = append(n.devnames, devname)
+		n.ifacesMonitored = append(n.ifacesMonitored, devname)
 	}
-	sort.Strings(n.devnames)
+	// no device names specified; monitor all devices
+	if len(config) == 0 {
+		for _, intf := range ifaces {
+			n.ifacesMonitored = append(n.ifacesMonitored, intf.Name)
+
+		}
+	}
+	sort.Strings(n.ifacesMonitored)
+	if n.verbose {
+		plural := ""
+		if len(n.ifacesMonitored) > 1 {
+			plural = "s"
+		}
+		log.Printf("%s monitor: monitoring device%s %s\n", n.name, plural, strings.Join(n.ifacesMonitored, ","))
+	}
 	return nil
 }
 
@@ -72,8 +86,8 @@ func (n *NetstatMonitor) Run(interval time.Duration) error {
 			netstats, err := net.IOCounters(true)
 			countermap := make(map[string]net.IOCountersStat)
 			for _, ioc := range netstats {
-				idx := sort.SearchStrings(n.devnames, ioc.Name)
-				if idx < len(n.devnames) && n.devnames[idx] == ioc.Name {
+				idx := sort.SearchStrings(n.ifacesMonitored, ioc.Name)
+				if idx < len(n.ifacesMonitored) && n.ifacesMonitored[idx] == ioc.Name {
 					countermap[ioc.Name] = ioc
 				}
 			}
