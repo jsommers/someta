@@ -154,7 +154,10 @@ func main() {
 		log.Fatalln("No monitors configured; exiting.")
 	}
 
-	log.Printf("Starting metadata measurement with verbose %v and command <%s>\n", verboseOutput, commandLine)
+	log.Printf("Starting someta with verbose %v and command <%s>\n", verboseOutput, commandLine)
+	if debugOutput {
+		log.Printf("Not writing metadata to file (writing to stdout)")
+	}
 
 	// open metadata output
 	var encoder *json.Encoder

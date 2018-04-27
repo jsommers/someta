@@ -16,8 +16,8 @@ func init() {
 
 // IOMetadata encapsulates what it says
 type IOMetadata struct {
-	Timestamp time.Time             `json:"timestamp"`
-	Counters  []disk.IOCountersStat `json:"counters"`
+	Timestamp time.Time                      `json:"timestamp"`
+	Counters  map[string]disk.IOCountersStat `json:"counters"`
 }
 
 // IOMonitor collects io/disk usage metadata
@@ -49,6 +49,19 @@ func (i *IOMonitor) Init(name string, verbose bool, config map[string]string) er
 		if !ok {
 			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", i.name, devname, strings.Join(alldevs, ","))
 		}
+		i.disksMonitored = append(i.disksMonitored, devname)
+	}
+	if len(config) == 0 {
+		for devname := range cmap {
+			i.disksMonitored = append(i.disksMonitored, devname)
+		}
+	}
+	if i.verbose {
+		plural := ""
+		if len(i.disksMonitored) > 1 {
+			plural = "s"
+		}
+		log.Printf("%s monitor: monitoring device%s %s\n", i.name, plural, strings.Join(i.disksMonitored, ","))
 	}
 	return nil
 }
@@ -70,9 +83,9 @@ func (i *IOMonitor) Run(interval time.Duration) error {
 				log.Printf("%s: %v\n", i.name, err)
 			} else {
 				i.mutex.Lock()
-				var currCounters []disk.IOCountersStat
+				var currCounters = make(map[string]disk.IOCountersStat)
 				for _, devname := range i.disksMonitored {
-					currCounters = append(currCounters, iocounters[devname])
+					currCounters[devname] = iocounters[devname]
 				}
 				i.metadata = append(i.metadata, IOMetadata{t, currCounters})
 				i.mutex.Unlock()
