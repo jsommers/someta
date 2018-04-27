@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	someta "github.com/jsommers/someta/monitors"
@@ -12,6 +13,8 @@ import (
 	"strings"
 	"time"
 )
+
+const sometaVersion = "2018.04"
 
 var verboseOutput = false
 var debugOutput = false
@@ -61,6 +64,7 @@ func (m *monitorConfig) Set(val string) error {
 var outfileBase = "metadata"
 var commandLine = ""
 var statusInterval = 5 * time.Second
+var warmCool = 1 * time.Second
 var cpuAffinity = -1
 var monCfg = &monitorConfig{}
 var monitors map[string](*someta.MetadataGenerator)
@@ -74,9 +78,21 @@ func init() {
 	flag.BoolVar(&logfileOutput, "l", false, "Send logging messages to a file (by default, they go to stdout)")
 	flag.StringVar(&outfileBase, "f", "metadata", "Output file basename; current date/time is included as part of the filename")
 	flag.DurationVar(&statusInterval, "u", 5*time.Second, "Time interval on which to show periodic status while running")
+	flag.DurationVar(&warmCool, "w", 1*time.Second, "Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected")
 	flag.IntVar(&cpuAffinity, "C", -1, "Set CPU affinity (default is not to set affinity)")
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
 	monitors = make(map[string](*someta.MetadataGenerator))
+}
+
+func getSystemInfo() string {
+	cmd := exec.Command("uname", "-a")
+	var outbuf bytes.Buffer
+	cmd.Stdout = &outbuf
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return outbuf.String()
 }
 
 func fileBase() string {
@@ -110,6 +126,18 @@ func main() {
 	}
 
 	// open metadata output
+	metaOut, err := os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer metaOut.Close()
+	encoder := json.NewEncoder(metaOut)
+
+	sysinfo := make(map[string]interface{})
+	sysinfo["os"] = getSystemInfo()
+	sysinfo["command"] = commandLine
+	sysinfo["version"] = sometaVersion
+	sysinfo["start"] = time.Now()
 
 	// start monitors
 
@@ -150,6 +178,8 @@ func main() {
 	time.Sleep(warmCool)
 
 	// shut down monitors
+	sysinfo["end"] = time.Now()
+	encoder.Encode(sysinfo)
 
 	// write out metadata
 }
