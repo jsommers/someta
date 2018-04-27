@@ -7,6 +7,9 @@ import (
 	"fmt"
 	someta "github.com/jsommers/someta/monitors"
 	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/host"
+	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/net"
 	"log"
 	"os"
 	"os/exec"
@@ -84,17 +87,6 @@ func init() {
 	flag.IntVar(&cpuAffinity, "C", -1, "Set CPU affinity (default is not to set affinity)")
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
 	monitors = make(map[string](*someta.MetadataGenerator))
-}
-
-func getSystemInfo() string {
-	cmd := exec.Command("uname", "-a")
-	var outbuf bytes.Buffer
-	cmd.Stdout = &outbuf
-	err := cmd.Run()
-	if err != nil {
-		log.Fatal(err)
-	}
-	return outbuf.String()
 }
 
 func startMonitors() {
@@ -176,13 +168,18 @@ func main() {
 	}
 
 	sysinfo := make(map[string]interface{})
-	sysinfo["os"] = getSystemInfo()
+	sysdescription, _ := host.Info()
+	sysinfo["sysinfo"] = sysdescription
 	sysinfo["command"] = commandLine
 	sysinfo["version"] = sometaVersion
 	var start = time.Now()
 	sysinfo["start"] = start
-	syscpuInfo, _ := cpu.Info()
-	sysinfo["syscpu"] = syscpuInfo
+	cpuinfo, _ := cpu.Info()
+	sysinfo["syscpu"] = cpuinfo
+	meminfo, _ := mem.VirtualMemory()
+	sysinfo["sysmem"] = meminfo
+	netinfo, _ := net.Interfaces()
+	sysinfo["sysnet"] = netinfo
 	md := someta.MonitorMetadata{Name: "someta", Type: "system", Data: sysinfo}
 
 	// start monitors

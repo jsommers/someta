@@ -22,8 +22,12 @@ type MonitorMetadata struct {
 
 var monitorRegistry map[string]MetadataGenerator
 
-func init() {
-	monitorRegistry = make(map[string]MetadataGenerator)
+// InitRegistry initializes the monitor registry; must be called by someta main
+func registerMonitor(name string, gen MetadataGenerator) {
+	if monitorRegistry == nil {
+		monitorRegistry = make(map[string]MetadataGenerator)
+	}
+	monitorRegistry[name] = gen
 }
 
 // Monitors returns a slice of monitor names

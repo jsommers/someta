@@ -10,13 +10,13 @@ import (
 )
 
 func init() {
-	monitorRegistry["mem"] = &MemoryMonitor{}
+	registerMonitor("mem", &MemoryMonitor{})
 }
 
 // MemoryMetadata encapsulates what it says
 type MemoryMetadata struct {
-	Timestamp time.Time             `json:"timestamp"`
-	Memory    mem.VirtualMemoryStat `json:"memory"`
+	Timestamp   time.Time `json:"timestamp"`
+	UsedPercent float64   `json:"usedPercent"`
 }
 
 // MemoryMonitor collects memory usage metadata
@@ -55,13 +55,8 @@ func (m *MemoryMonitor) Run(interval time.Duration) error {
 			if err != nil {
 				log.Printf("%s: %v\n", m.name, err)
 			} else {
-				/*
-					if m.verbose {
-						log.Printf("%s: %v\n", m.name, memval)
-					}
-				*/
 				m.mutex.Lock()
-				m.metadata = append(m.metadata, MemoryMetadata{t, *memval})
+				m.metadata = append(m.metadata, MemoryMetadata{t, memval.UsedPercent})
 				m.mutex.Unlock()
 			}
 		}
