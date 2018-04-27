@@ -143,7 +143,10 @@ func main() {
 
 	for mName, mCfg := range monCfg.cfg {
 		mon := someta.GetMonitor(mName)
-		(*mon).Init(mName, verboseOutput, mCfg)
+		err := (*mon).Init(mName, verboseOutput, mCfg)
+		if err != nil {
+			log.Fatal(err)
+		}
 		monitors[mName] = mon
 	}
 
