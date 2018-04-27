@@ -18,6 +18,12 @@ Changes from the earlier Python version of SoMeta:
  * There's even more rich data collected about the system when someta starts up
  * I'm sure there are other changes I'm forgetting :-(
 
+Examples
+--------
+
+Needs to be updated
+
+
 License
 -------
 
