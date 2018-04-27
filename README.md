@@ -7,6 +7,16 @@ This is a complete rewrite of SoMeta in golang.
 
 The command line will basically be like that with the Python version (only faster, right?)
 
+Changes
+-------
+
+Changes from the earlier Python version of SoMeta:
+ * Because of Go's command-argument handling, flags to someta cannot be written like `-Mcpu`, but must rather be written as `-M=cpu` or `-M cpu`.
+ * CPU affinity is not yet implemented
+ * Metadata structure is changed to permit a less tightly-coupled architecture between the someta main and monitors
+   * Analysis and plotting tools are not yet revised to account for these changes
+ * There's even more rich data collected about the system when someta starts up
+ * I'm sure there are other changes I'm forgetting :-(
 
 License
 -------
