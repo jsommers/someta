@@ -28,7 +28,7 @@ var monitorRegex = regexp.MustCompile(`^([a-z]+)(:.+)*`)
 var debugOutput = false
 
 type monitorConfig struct {
-	cfg map[string](map[string]string)
+	cfg map[string]([]map[string]string)
 }
 
 func (m *monitorConfig) String() string {
@@ -44,7 +44,6 @@ func (m *monitorConfig) Set(val string) error {
 		return fmt.Errorf("%s is not a valid monitor name", configvals[0])
 	}
 
-	// FIXME: need to handle making multiple copies of the same monitor
 	var name = configvals[1]
 	var mc = make(map[string]string)
 	for _, kvstr := range strings.Split(strings.Trim(configvals[2], " "), ":") {
@@ -62,7 +61,7 @@ func (m *monitorConfig) Set(val string) error {
 		}
 		mc[kvitem[0]] = val
 	}
-	m.cfg[name] = mc
+	m.cfg[name] = append(m.cfg[name], mc)
 	return nil
 }
 
@@ -76,7 +75,9 @@ var monitors map[string]someta.MetadataGenerator
 var waiter = &sync.WaitGroup{}
 
 func init() {
-	monCfg.cfg = make(map[string](map[string]string))
+	monCfg.cfg = make(map[string]([]map[string]string))
+	monitors = make(map[string]someta.MetadataGenerator)
+
 	flag.StringVar(&commandLine, "c", "", "Command line for external measurement program")
 	flag.BoolVar(&verboseOutput, "v", false, "Verbose output")
 	flag.BoolVar(&quietOutput, "q", false, "Quiet output")
@@ -87,7 +88,6 @@ func init() {
 	flag.DurationVar(&warmCool, "w", 1*time.Second, "Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected")
 	flag.IntVar(&cpuAffinity, "C", -1, "Set CPU affinity (default is not to set affinity)")
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
-	monitors = make(map[string]someta.MetadataGenerator)
 }
 
 func startMonitors() {
@@ -142,13 +142,19 @@ func main() {
 		log.Fatalln("No command specified; exiting.")
 	}
 
-	for mName, mCfg := range monCfg.cfg {
-		mon := someta.GetMonitor(mName)
-		err := mon.Init(mName, verboseOutput, mCfg)
-		if err != nil {
-			log.Fatal(err)
+	for mName, mCfgSlice := range monCfg.cfg {
+		for idx, mCfg := range mCfgSlice {
+			var instanceName = mName
+			if len(mCfgSlice) > 1 {
+				instanceName = fmt.Sprintf("%s%d", mName, idx)
+			}
+			mon := someta.GetMonitor(mName)
+			err := mon.Init(instanceName, verboseOutput, mCfg)
+			if err != nil {
+				log.Fatal(err)
+			}
+			monitors[instanceName] = mon
 		}
-		monitors[mName] = mon
 	}
 
 	if len(monitors) == 0 {
