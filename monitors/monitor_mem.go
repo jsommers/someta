@@ -10,13 +10,18 @@ import (
 )
 
 func init() {
-	registerMonitor("mem", &MemoryMonitor{})
+	registerMonitor("mem", NewMemoryMonitor)
 }
 
 // MemoryMetadata encapsulates what it says
 type MemoryMetadata struct {
 	Timestamp   time.Time `json:"timestamp"`
 	UsedPercent float64   `json:"usedPercent"`
+}
+
+// NewMemoryMonitor creates and returns a new MemoryMonitor
+func NewMemoryMonitor() MetadataGenerator {
+	return new(MemoryMonitor)
 }
 
 // MemoryMonitor collects memory usage metadata

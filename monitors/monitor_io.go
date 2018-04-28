@@ -11,13 +11,18 @@ import (
 )
 
 func init() {
-	registerMonitor("io", &IOMonitor{})
+	registerMonitor("io", NewIOMonitor)
 }
 
 // IOMetadata encapsulates what it says
 type IOMetadata struct {
 	Timestamp time.Time                      `json:"timestamp"`
 	Counters  map[string]disk.IOCountersStat `json:"counters"`
+}
+
+// NewIOMonitor creates and returns a new IOMonitor
+func NewIOMonitor() MetadataGenerator {
+	return new(IOMonitor)
 }
 
 // IOMonitor collects io/disk usage metadata

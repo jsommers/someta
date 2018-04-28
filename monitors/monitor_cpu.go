@@ -10,13 +10,18 @@ import (
 )
 
 func init() {
-	registerMonitor("cpu", &CPUMonitor{})
+	registerMonitor("cpu", NewCPUMonitor)
 }
 
 // CPUMetadata encapsulates what it says
 type CPUMetadata struct {
 	Timestamp time.Time `json:"timestamp"`
 	CPU       []float64 `json:"cpuidle"`
+}
+
+// NewCPUMonitor creates and returns a new CPUMonitor
+func NewCPUMonitor() MetadataGenerator {
+	return new(CPUMonitor)
 }
 
 // CPUMonitor collects cpu usage metadata

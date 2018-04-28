@@ -12,13 +12,18 @@ import (
 )
 
 func init() {
-	registerMonitor("netstat", &NetstatMonitor{})
+	registerMonitor("netstat", NewNetstatMonitor)
 }
 
 // NetstatMetadata encapsulates what it says
 type NetstatMetadata struct {
 	Timestamp time.Time                     `json:"timestamp"`
 	Netstat   map[string]net.IOCountersStat `json:"netstat"`
+}
+
+// NewNetstatMonitor creates and returns a new NetstatMonitor
+func NewNetstatMonitor() MetadataGenerator {
+	return new(NetstatMonitor)
 }
 
 // NetstatMonitor collects network interface countesr metadata

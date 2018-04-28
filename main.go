@@ -44,6 +44,7 @@ func (m *monitorConfig) Set(val string) error {
 		return fmt.Errorf("%s is not a valid monitor name", configvals[0])
 	}
 
+	// FIXME: need to handle making multiple copies of the same monitor
 	var name = configvals[1]
 	var mc = make(map[string]string)
 	for _, kvstr := range strings.Split(strings.Trim(configvals[2], " "), ":") {
@@ -71,7 +72,7 @@ var statusInterval = 5 * time.Second
 var warmCool = 1 * time.Second
 var cpuAffinity = -1
 var monCfg = &monitorConfig{}
-var monitors map[string](*someta.MetadataGenerator)
+var monitors map[string]someta.MetadataGenerator
 var waiter = &sync.WaitGroup{}
 
 func init() {
@@ -86,7 +87,7 @@ func init() {
 	flag.DurationVar(&warmCool, "w", 1*time.Second, "Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected")
 	flag.IntVar(&cpuAffinity, "C", -1, "Set CPU affinity (default is not to set affinity)")
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
-	monitors = make(map[string](*someta.MetadataGenerator))
+	monitors = make(map[string]someta.MetadataGenerator)
 }
 
 func startMonitors() {
@@ -97,7 +98,7 @@ func startMonitors() {
 		}
 		go func() {
 			waiter.Add(1)
-			(*monitor).Run(time.Second)
+			monitor.Run(time.Second)
 			waiter.Done()
 		}()
 	}
@@ -108,7 +109,7 @@ func stopMonitors() {
 		if verboseOutput {
 			log.Printf("Stopping monitor %s\n", mName)
 		}
-		(*mon).Stop()
+		mon.Stop()
 	}
 }
 
@@ -117,7 +118,7 @@ func flushMonitorMetadata(encoder *json.Encoder) {
 		if verboseOutput {
 			log.Printf("Flushing monitor %s\n", mName)
 		}
-		(*mon).Flush(encoder)
+		mon.Flush(encoder)
 	}
 }
 
@@ -143,7 +144,7 @@ func main() {
 
 	for mName, mCfg := range monCfg.cfg {
 		mon := someta.GetMonitor(mName)
-		err := (*mon).Init(mName, verboseOutput, mCfg)
+		err := mon.Init(mName, verboseOutput, mCfg)
 		if err != nil {
 			log.Fatal(err)
 		}

@@ -20,12 +20,12 @@ type MonitorMetadata struct {
 	Data interface{} `json:"data"`
 }
 
-var monitorRegistry map[string]MetadataGenerator
+var monitorRegistry map[string](func() MetadataGenerator)
 
 // InitRegistry initializes the monitor registry; must be called by someta main
-func registerMonitor(name string, gen MetadataGenerator) {
+func registerMonitor(name string, gen func() MetadataGenerator) {
 	if monitorRegistry == nil {
-		monitorRegistry = make(map[string]MetadataGenerator)
+		monitorRegistry = make(map[string](func() MetadataGenerator))
 	}
 	monitorRegistry[name] = gen
 }
@@ -40,10 +40,10 @@ func Monitors() []string {
 }
 
 // GetMonitor returns a pointer to a MetadataGenerator given a name, or nil if no such monitor exists
-func GetMonitor(name string) *MetadataGenerator {
+func GetMonitor(name string) MetadataGenerator {
 	mGen, ok := monitorRegistry[name]
 	if ok {
-		return &mGen
+		return mGen()
 	}
 	return nil
 }
