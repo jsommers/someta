@@ -182,6 +182,7 @@ func main() {
 
 	sysinfo := make(map[string]interface{})
 	sysdescription, _ := host.Info()
+	sysinfo["someta"], _ = os.Executable()
 	sysinfo["sysinfo"] = sysdescription
 	sysinfo["command"] = commandLine
 	sysinfo["version"] = sometaVersion
