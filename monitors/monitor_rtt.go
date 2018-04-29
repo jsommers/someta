@@ -36,27 +36,27 @@ func (p *probe) String() string {
 
 // RTTMetadata is a slice of probe samples.  It implements sort.Interface
 type RTTMetadata struct {
-	probes []probe
+	Probes []probe `json:"probes"`
 }
 
 // Len returns the number of probe samples
 func (r *RTTMetadata) Len() int {
-	return len(r.probes)
+	return len(r.Probes)
 }
 
 // Less returns true if probe sample i has a send time < probe sample j
 func (r *RTTMetadata) Less(i, j int) bool {
-	return r.probes[i].SendTime.Before(r.probes[j].SendTime)
+	return r.Probes[i].SendTime.Before(r.Probes[j].SendTime)
 }
 
 // Swap swaps two probe samples in the slice
 func (r *RTTMetadata) Swap(i, j int) {
-	r.probes[i], r.probes[j] = r.probes[j], r.probes[i]
+	r.Probes[i], r.Probes[j] = r.Probes[j], r.Probes[i]
 }
 
 // Append appends a probe record to the metadata
 func (r *RTTMetadata) Append(p *probe) {
-	r.probes = append(r.probes, *p)
+	r.Probes = append(r.Probes, *p)
 }
 
 /*
