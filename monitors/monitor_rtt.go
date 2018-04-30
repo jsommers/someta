@@ -13,7 +13,7 @@ import (
 	"net"
 	"os"
 	"regexp"
-        "runtime"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -535,16 +535,15 @@ func (r *RTTMonitor) pcapSetup() {
 	}
 	defer inactive.CleanUp()
 
-	// works best on darwin
-        var tmo time.Duration = time.Millisecond
-        if runtime.GOOS == "linux" {
-            tmo *= 100
-        } else if runtime.GOOS == "darwin" {
-           tmo *= 1
-        }
-        if r.verbose {
-        log.Printf("RTTMonitor setting pcap timeout to %v\n", tmo)
-        }
+	var tmo = time.Millisecond
+	if runtime.GOOS == "linux" {
+		tmo *= 10
+	} else if runtime.GOOS == "darwin" {
+		tmo *= 1
+	}
+	if r.verbose {
+		log.Printf("RTTMonitor setting pcap timeout to %v\n", tmo)
+	}
 	if err = inactive.SetTimeout(tmo); err != nil {
 		log.Printf("couldn't set timeout to %v on read: %v", tmo, err)
 	}
@@ -557,29 +556,26 @@ func (r *RTTMonitor) pcapSetup() {
 		log.Fatal(err)
 	}
 
-        tssources := inactive.SupportedTimestamps()
-        if r.verbose {
-            log.Printf("RTTMonitor supported timestamps: %v\n", tssources)
-        }
+	tssources := inactive.SupportedTimestamps()
+	if r.verbose {
+		log.Printf("RTTMonitor supported timestamps: %v\n", tssources)
+	}
 	handle, err := inactive.Activate() // after this, inactive is no longer valid
 	if err != nil {
-            log.Fatalf("%v: %v", err, inactive.Error())
-        }
+		log.Fatalf("%v: %v", err, inactive.Error())
+	}
 
-        r.pcapHandle = handle
+	r.pcapHandle = handle
 	if err = r.pcapHandle.SetBPFFilter("icmp or icmp6"); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func v4SenderSetup() (net.PacketConn, *ipv4.PacketConn) {
-	listener, err := net.ListenPacket("ip4:1", "0.0.0.0") // this must be ip4 for later sockopts to work correctly
+	listener, err := net.ListenPacket("ip4:1", "0.0.0.0")
 	if err != nil {
 		log.Fatal(err)
 	}
 	netlayer := ipv4.NewPacketConn(listener)
-	if err := netlayer.SetControlMessage(ipv4.FlagTTL|ipv4.FlagSrc|ipv4.FlagDst|ipv4.FlagInterface, true); err != nil {
-		log.Fatal(err)
-	}
 	return listener, netlayer
 }
