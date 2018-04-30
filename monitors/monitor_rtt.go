@@ -90,7 +90,7 @@ type RTTMonitor struct {
 	nextSequence int
 	allHops      bool
 
-	interval float64
+	interval time.Duration
 
 	pcapHandle *pcap.Handle
 	v4Listener net.PacketConn
@@ -100,17 +100,18 @@ type RTTMonitor struct {
 var nameRegex *regexp.Regexp
 
 // Init initializes an RTT monitor
-func (r *RTTMonitor) Init(name string, verbose bool, config map[string]string) error {
+func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	r.name = name
 	r.verbose = verbose
 	r.stop = make(chan struct{})
 	md := &RTTMetadata{}
 	r.metadata = md
+	r.interval = defaultInterval
 
 	r.proto = "ip:1" // default
 	val, ok := config["dest"]
 	if !ok {
-		log.Fatal(`Need "dest" in RTT monitor configuration`)
+		log.Fatalf(`%s monitor: Need "dest" in RTT monitor configuration`, name)
 	}
 	r.ipDest = val
 	delete(config, "dest")
@@ -118,7 +119,7 @@ func (r *RTTMonitor) Init(name string, verbose bool, config map[string]string) e
 	var err error
 	r.ipDestIP, err = net.ResolveIPAddr("ip", r.ipDest)
 	if err != nil {
-		log.Fatalf("couldn't parse destination IP address %s: %v\n", r.ipDest, err)
+		log.Fatalf("%s monitor: couldn't parse destination IP address %s: %v\n", name, r.ipDest, err)
 	}
 
 	r.hopLimited = false
@@ -126,28 +127,28 @@ func (r *RTTMonitor) Init(name string, verbose bool, config map[string]string) e
 	if ok {
 		b, err := strconv.ParseBool(val)
 		if err != nil {
-			log.Fatalf("hoplimited probe parameter: %v", err)
+			log.Fatalf("%s monitor: hoplimited probe parameter: %v", name, err)
 		}
 		r.hopLimited = b
 	} else {
 		if verbose {
-			log.Printf("RTTMonitor %s defaulting to ping mode\n", name)
+			log.Printf("%s monitor defaulting to ping mode\n", name)
 		}
 	}
 	if r.hopLimited {
-		log.Fatal("hop limited isn't tested yet")
+		log.Fatalf("%s monitor hop limited isn't tested yet\n", name)
 	}
 
 	if ip4 := r.ipDestIP.IP.To4(); ip4 != nil {
 		r.useV4 = true
 	} else {
 		r.useV4 = false
-		log.Fatal("Warning: IPv6 probing is not implemented yet")
+		log.Fatalf("%s monitor: IPv6 probing is not implemented yet", name)
 	}
 
 	val, ok = config["interface"]
 	if !ok {
-		log.Fatal(`Need "interface" in RTT monitor configuration`)
+		log.Fatalf(`%s monitor: need "interface" in RTT monitor configuration`, name)
 	}
 	r.netDev = val
 	delete(config, "interface")
@@ -158,13 +159,13 @@ func (r *RTTMonitor) Init(name string, verbose bool, config map[string]string) e
 		var err error
 		r.maxTTL, err = strconv.Atoi(val)
 		if err != nil {
-			log.Fatalf("parsing maxttl: %v\n", err)
+			log.Fatalf("%s monitor: parsing maxttl: %v\n", name, err)
 		}
 		if r.maxTTL <= 0 || r.maxTTL > 255 {
-			log.Fatalf("invalid value %d for hopcount\n", r.maxTTL)
+			log.Fatalf("%s monitor: invalid value %d for hopcount\n", name, r.maxTTL)
 		}
 		if r.hopLimited && r.maxTTL > 32 {
-			log.Fatalf("maxTTL too big for hop-limited probe")
+			log.Fatalf("%s monitor: maxTTL too big for hop-limited probe", name)
 		}
 	}
 	delete(config, "maxttl")
@@ -175,33 +176,32 @@ func (r *RTTMonitor) Init(name string, verbose bool, config map[string]string) e
 		var err error
 		r.allHops, err = strconv.ParseBool(val)
 		if err != nil {
-			log.Fatalf("can't parse allhops config: %s : %v\n", val, err)
+			log.Fatalf("%s monitor: can't parse allhops config: %s : %v\n", name, val, err)
 		}
 	}
 	delete(config, "allhops")
 
-	r.interval = 1.0
 	val, ok = config["rate"]
 	if ok {
 		rate, err := strconv.ParseFloat(val, 64)
 		if err != nil {
-			log.Fatalf("error with probe rate: %v\n", err)
+			log.Fatalf("%s monitor: error with probe rate: %v\n", name, err)
 		}
-		r.interval = 1.0 / rate
+		r.interval = time.Duration(time.Duration(1000.0/rate) * time.Millisecond)
 	}
 	val, ok = config["interval"]
 	if ok {
-		var err error
-		r.interval, err = strconv.ParseFloat(val, 32)
+		ival, err := time.ParseDuration(val)
 		if err != nil {
-			log.Fatalf("error with probe rate: %v\n", err)
+			log.Fatalf("%s monitor: error with probe rate: %v\n", name, err)
 		}
+		r.interval = ival
 	}
 	delete(config, "rate")
 	delete(config, "interval")
 
 	if len(config) > 0 {
-		log.Fatalf("Unhandled RTTMonitor configuration: %v\n", config)
+		log.Fatalf("%s monitor: unhandled configuration: %v\n", name, config)
 	}
 
 	r.nextSequence = 1
@@ -209,7 +209,7 @@ func (r *RTTMonitor) Init(name string, verbose bool, config map[string]string) e
 	r.localAddrs = make(map[string]net.IP)
 	r.getLocalAddrs(r.netDev)
 	if len(r.localAddrs) == 0 {
-		log.Fatal("No IP addresses assigned to monitor device")
+		log.Fatalf("%s monitor: no IP addresses assigned to monitor device", name)
 	}
 
 	var baseIdent = os.Getpid() % 65535
@@ -331,6 +331,8 @@ func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4
 	icmptype := icmp.TypeCode.Type()
 	// icmpcode := icmp.TypeCode.Code()
 
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 	proberec, ok := r.probeMap[icmpid][icmpseq]
 	if !ok {
 		return
@@ -348,9 +350,7 @@ func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4
 		if r.verbose {
 			log.Printf("Probe %d rtt %v\n", icmpseq, proberec.WireRecv.Sub(proberec.WireSend))
 		}
-		r.mutex.Lock()
 		r.metadata.Append(proberec)
-		r.mutex.Unlock()
 	}
 
 	/*
@@ -395,29 +395,57 @@ func (r *RTTMonitor) handleV6(ts time.Time, ip *layers.IPv6, icmp *layers.ICMPv6
 	log.Println("v6 packet receive isn't handled yet")
 }
 
-// Run runs the RTT monitor; this should be invoked in a goroutine
-func (r *RTTMonitor) Run(interval time.Duration) error {
-	go r.pcapReader()
-	defer r.shutdown()
+func (r *RTTMonitor) sweepProbes(all bool) {
+	if r.verbose {
+		log.Println("tacluso'r probiau")
+	}
+	var now = time.Now()
+	r.mutex.Lock()
+	for _, seqmap := range r.probeMap {
+		for seq, prec := range seqmap {
+			if prec.SendTime.Sub(now) > 2*time.Second {
+				r.metadata.Append(prec)
+				delete(seqmap, seq)
+			}
+		}
+	}
+	r.mutex.Unlock()
+}
 
-	// FIXME: should do this with gamma probing, not uniform
-	// FIXME: should stay in this loop until we see that
-	// the probeMap is drained (or close to drained)
-
-	// FIXME: need to add a sweeper for the probemap to clean out
-	// probes that don't have a recv (are lost)
-	tick := time.NewTicker(interval)
-	defer tick.Stop()
-
+func (r *RTTMonitor) probeSweeper() {
+	// every 2 seconds, sweep through and remove "old" probes
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
 	for {
 		select {
-		case <-tick.C:
+		case <-t.C:
+			r.sweepProbes(false)
+		case <-r.stop:
+			return
+		}
+	}
+}
+
+// Run runs the RTT monitor; this should be invoked in a goroutine
+func (r *RTTMonitor) Run() error {
+	go r.pcapReader()
+	go r.probeSweeper()
+	defer r.shutdown()
+
+	timer := time.NewTimer(r.interval)
+	for {
+		select {
+		case <-timer.C:
 			if r.verbose {
 				log.Printf("Sending probe %d\n", r.nextSequence)
 			}
 			r.sendv4Probe()
+			timer.Reset(r.interval)
 
 		case <-r.stop:
+			timer.Stop()
+			time.Sleep(1 * time.Second)
+			r.sweepProbes(true)
 			return nil
 		}
 	}
@@ -458,18 +486,12 @@ func (r *RTTMonitor) sendv4Probe() {
 			SendTime: time.Now(),
 			OutTTL:   ttl,
 		}
+		r.mutex.Lock()
 		r.probeMap[ident][r.nextSequence] = probe
+		r.mutex.Unlock()
 	}
 	r.nextSequence = (r.nextSequence + 1) % 65535
 }
-
-type probeDirection int
-
-const (
-	notMyProbe probeDirection = iota
-	outgoing
-	incoming
-)
 
 // NewRTTMonitor creates and returns a new RTTMonitor
 func NewRTTMonitor() MetadataGenerator {
@@ -495,35 +517,6 @@ func (r *RTTMonitor) getLocalAddrs(netDev string) {
 		}
 	}
 }
-
-/*
-func main() {
-	flag.Parse()
-	mon := &RTTMonitor{}
-	cfg := make(map[string]string)
-	cfg["dest"] = "149.43.80.25"
-	cfg["interface"] = "en0"
-	cfg["maxttl"] = "32"
-
-	if err := mon.Init("rtt", true, cfg); err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("Running on", runtime.GOOS)
-
-	go func() {
-		mon.Run(time.Second * 1)
-	}()
-	fmt.Println("Sleeping")
-	time.Sleep(10 * time.Second)
-	fmt.Println("Woke up; stopping")
-	mon.Stop()
-
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "  ")
-
-	mon.Flush(encoder)
-}
-*/
 
 func (r *RTTMonitor) pcapSetup() {
 	// no return value, because if there are any problems

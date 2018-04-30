@@ -33,14 +33,16 @@ type NetstatMonitor struct {
 	name            string
 	verbose         bool
 	mutex           sync.Mutex
+	interval        time.Duration
 	ifacesMonitored []string
 }
 
 // Init initializes a NetstatMonitor
-func (n *NetstatMonitor) Init(name string, verbose bool, config map[string]string) error {
+func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	n.name = name
 	n.verbose = verbose
 	n.stop = make(chan struct{})
+	n.interval = defaultInterval
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		log.Fatal(err)
@@ -50,6 +52,16 @@ func (n *NetstatMonitor) Init(name string, verbose bool, config map[string]strin
 		allintf = append(allintf, netdev.Name)
 	}
 	sort.Strings(allintf)
+
+	intstr, ok := config["interval"]
+	if ok {
+		interval, err := time.ParseDuration(intstr)
+		if err != nil {
+			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
+		}
+		n.interval = interval
+		delete(config, "interval")
+	}
 
 	for devname := range config {
 		idx := sort.SearchStrings(allintf, devname)
@@ -77,8 +89,8 @@ func (n *NetstatMonitor) Init(name string, verbose bool, config map[string]strin
 }
 
 // Run runs the netstat monitor; this should be invoked in a goroutine
-func (n *NetstatMonitor) Run(interval time.Duration) error {
-	ticker := time.NewTicker(interval)
+func (n *NetstatMonitor) Run() error {
+	ticker := time.NewTicker(n.interval)
 	defer ticker.Stop()
 	for {
 		select {

@@ -31,22 +31,33 @@ type CPUMonitor struct {
 	name     string
 	verbose  bool
 	mutex    sync.Mutex
+	interval time.Duration
 }
 
 // Init initializes a CPUMonitor
-func (c *CPUMonitor) Init(name string, verbose bool, config map[string]string) error {
+func (c *CPUMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	c.name = name
 	c.verbose = verbose
 	c.stop = make(chan struct{})
+	c.interval = defaultInterval
+	intstr, ok := config["interval"]
+	if ok {
+		interval, err := time.ParseDuration(intstr)
+		if err != nil {
+			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
+		}
+		c.interval = interval
+		delete(config, "interval")
+	}
 	if len(config) > 0 {
-		return fmt.Errorf("%s monitor: no configuration is expected", name)
+		return fmt.Errorf("%s monitor: invalid configuration items present %v", name, config)
 	}
 	return nil
 }
 
 // Run runs the cpu monitor; this should be invoked in a goroutine
-func (c *CPUMonitor) Run(interval time.Duration) error {
-	ticker := time.NewTicker(interval)
+func (c *CPUMonitor) Run() error {
+	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 	for {
 		select {

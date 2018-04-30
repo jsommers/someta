@@ -32,13 +32,15 @@ type IOMonitor struct {
 	name           string
 	verbose        bool
 	mutex          sync.Mutex
+	interval       time.Duration
 	disksMonitored []string
 }
 
 // Init initializes an IOMonitor
-func (i *IOMonitor) Init(name string, verbose bool, config map[string]string) error {
+func (i *IOMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	i.name = name
 	i.verbose = verbose
+	i.interval = defaultInterval
 	i.stop = make(chan struct{})
 	cmap, err := disk.IOCounters()
 	if err != nil {
@@ -47,6 +49,16 @@ func (i *IOMonitor) Init(name string, verbose bool, config map[string]string) er
 	var alldevs []string
 	for devname := range cmap {
 		alldevs = append(alldevs, devname)
+	}
+
+	intstr, ok := config["interval"]
+	if ok {
+		interval, err := time.ParseDuration(intstr)
+		if err != nil {
+			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
+		}
+		i.interval = interval
+		delete(config, "interval")
 	}
 
 	for devname := range config {
@@ -72,8 +84,8 @@ func (i *IOMonitor) Init(name string, verbose bool, config map[string]string) er
 }
 
 // Run runs the memory monitor; this should be invoked in a goroutine
-func (i *IOMonitor) Run(interval time.Duration) error {
-	ticker := time.NewTicker(interval)
+func (i *IOMonitor) Run() error {
+	ticker := time.NewTicker(i.interval)
 	defer ticker.Stop()
 	for {
 		select {

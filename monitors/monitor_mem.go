@@ -31,22 +31,34 @@ type MemoryMonitor struct {
 	name     string
 	verbose  bool
 	mutex    sync.Mutex
+	interval time.Duration
 }
 
 // Init initialize a MemoryMonitor
-func (m *MemoryMonitor) Init(name string, verbose bool, config map[string]string) error {
+func (m *MemoryMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	m.name = name
 	m.verbose = verbose
+	m.interval = defaultInterval
 	m.stop = make(chan struct{})
+
+	intstr, ok := config["interval"]
+	if ok {
+		interval, err := time.ParseDuration(intstr)
+		if err != nil {
+			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
+		}
+		m.interval = interval
+		delete(config, "interval")
+	}
 	if len(config) > 0 {
-		return fmt.Errorf("%s monitor: no configuration is expected", name)
+		return fmt.Errorf("%s monitor: invalid configuration items present %v", name, config)
 	}
 	return nil
 }
 
 // Run runs the memory monitor; this should be invoked in a goroutine
-func (m *MemoryMonitor) Run(interval time.Duration) error {
-	ticker := time.NewTicker(interval)
+func (m *MemoryMonitor) Run() error {
+	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 	for {
 		select {

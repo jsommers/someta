@@ -2,13 +2,16 @@ package someta
 
 import (
 	"encoding/json"
+	"log"
+	"math"
+	"math/rand"
 	"time"
 )
 
 // MetadataGenerator is the interface that all metadata sources must adhere to
 type MetadataGenerator interface {
-	Init(string, bool, map[string]string) error
-	Run(time.Duration) error
+	Init(string, bool, time.Duration, map[string]string) error
+	Run() error
 	Stop()
 	Flush(*json.Encoder) error
 }
@@ -52,4 +55,46 @@ func GetMonitor(name string) MetadataGenerator {
 func IsValidMonitor(name string) bool {
 	_, ok := monitorRegistry[name]
 	return ok
+}
+
+// code adapted from Python standard library Lib/random.py
+func _gammavariate(alpha, beta float64) float64 {
+	if alpha <= 0.0 || beta <= 0.0 {
+		log.Fatal("gammavariate: alpha and beta must be > 0.0")
+	}
+
+	if alpha <= 1 {
+		log.Fatal("gammavariate: algorithm not intended to handle alpha <= 1")
+	}
+
+	MagicConst := 1.0 + math.Log(4.5)
+	Log4 := math.Log(4.0)
+	const LowVal = 1e-7
+
+	ainv := math.Sqrt(2.0*alpha - 1.0)
+	bbb := alpha - Log4
+	ccc := alpha + ainv
+
+	for {
+		u1 := rand.Float64()
+
+		if !(LowVal < u1 && u1 < .9999999) {
+			continue
+		}
+		u2 := 1.0 - rand.Float64()
+		v := math.Log(u1/(1.0-u1)) / ainv
+		x := alpha * math.Exp(v)
+		z := u1 * u1 * u2
+		r := bbb + ccc*v - x
+		if r+MagicConst-4.5*z >= 0.0 || r >= math.Log(z) {
+			return x * beta
+		}
+	}
+}
+
+func gammaInterval(rate float64) float64 {
+	shape := 4.0 //  fixed integral shape 4-16; see SIGCOMM 06 and IMC 07 papers
+	mean := 1 / rate
+	scale := 1 / (shape / mean)
+	return _gammavariate(shape, scale)
 }

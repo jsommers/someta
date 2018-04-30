@@ -11,6 +11,7 @@ import (
 	"github.com/shirou/gopsutil/mem"
 	"github.com/shirou/gopsutil/net"
 	"log"
+	"math/rand"
 	"os"
 	"os/exec"
 	"regexp"
@@ -68,6 +69,7 @@ func (m *monitorConfig) Set(val string) error {
 var outfileBase = "metadata"
 var commandLine = ""
 var statusInterval = 5 * time.Second
+var monitorInterval = 1 * time.Second
 var warmCool = 1 * time.Second
 var cpuAffinity = -1
 var monCfg = &monitorConfig{}
@@ -85,6 +87,7 @@ func init() {
 	flag.BoolVar(&logfileOutput, "l", false, "Send logging messages to a file (by default, they go to stdout)")
 	flag.StringVar(&outfileBase, "f", "metadata", "Output file basename; current date/time is included as part of the filename")
 	flag.DurationVar(&statusInterval, "u", 5*time.Second, "Time interval on which to show periodic status while running")
+	flag.DurationVar(&monitorInterval, "m", 1*time.Second, "Time interval on which to gather metadata from monitors")
 	flag.DurationVar(&warmCool, "w", 1*time.Second, "Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected")
 	flag.IntVar(&cpuAffinity, "C", -1, "Set CPU affinity (default is not to set affinity)")
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
@@ -98,7 +101,7 @@ func startMonitors() {
 		}
 		go func() {
 			waiter.Add(1)
-			monitor.Run(time.Second)
+			monitor.Run()
 			waiter.Done()
 		}()
 	}
@@ -129,6 +132,7 @@ func fileBase() string {
 
 func main() {
 	flag.Parse()
+	rand.Seed(time.Now().UnixNano())
 	if logfileOutput {
 		logfile, err := os.OpenFile(fileBase()+".log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -149,7 +153,7 @@ func main() {
 				instanceName = fmt.Sprintf("%s%d", mName, idx)
 			}
 			mon := someta.GetMonitor(mName)
-			err := mon.Init(instanceName, verboseOutput, mCfg)
+			err := mon.Init(instanceName, verboseOutput, monitorInterval, mCfg)
 			if err != nil {
 				log.Fatal(err)
 			}
