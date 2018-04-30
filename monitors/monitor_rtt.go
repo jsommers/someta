@@ -403,7 +403,7 @@ func (r *RTTMonitor) sweepProbes(all bool) {
 	r.mutex.Lock()
 	for _, seqmap := range r.probeMap {
 		for seq, prec := range seqmap {
-			if prec.SendTime.Sub(now) > 2*time.Second {
+			if all || prec.SendTime.Sub(now) >= 10*time.Second {
 				r.metadata.Append(prec)
 				delete(seqmap, seq)
 			}
@@ -432,7 +432,7 @@ func (r *RTTMonitor) Run() error {
 	go r.probeSweeper()
 	defer r.shutdown()
 
-	timer := time.NewTimer(r.interval)
+	timer := time.NewTimer(gammaInterval(r.interval))
 	for {
 		select {
 		case <-timer.C:
@@ -440,7 +440,7 @@ func (r *RTTMonitor) Run() error {
 				log.Printf("Sending probe %d\n", r.nextSequence)
 			}
 			r.sendv4Probe()
-			timer.Reset(r.interval)
+			timer.Reset(gammaInterval(r.interval))
 
 		case <-r.stop:
 			timer.Stop()

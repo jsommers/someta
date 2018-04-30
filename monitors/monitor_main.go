@@ -92,9 +92,12 @@ func _gammavariate(alpha, beta float64) float64 {
 	}
 }
 
-func gammaInterval(rate float64) float64 {
+func gammaInterval(interval time.Duration) time.Duration {
+	rate := 1.0 / interval.Seconds()
 	shape := 4.0 //  fixed integral shape 4-16; see SIGCOMM 06 and IMC 07 papers
 	mean := 1 / rate
 	scale := 1 / (shape / mean)
-	return _gammavariate(shape, scale)
+	// convert to nanos
+	gv := _gammavariate(shape, scale) * 1000000000
+	return time.Duration(int64(gv))
 }
