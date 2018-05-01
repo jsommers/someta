@@ -15,8 +15,8 @@ func init() {
 
 // CPUMetadata encapsulates what it says
 type CPUMetadata struct {
-	Timestamp time.Time `json:"timestamp"`
-	CPU       []float64 `json:"cpuidle"`
+	Timestamp time.Time          `json:"timestamp"`
+	CPU       map[string]float64 `json:"cpuidle"`
 }
 
 // NewCPUMonitor creates and returns a new CPUMonitor
@@ -74,12 +74,12 @@ func (c *CPUMonitor) Run() error {
 				if c.verbose {
 					log.Printf("%s: %v\n", c.name, cpuval)
 				}
-				// turn values into idles
-				for i := range cpuval {
-					cpuval[i] = 100 - cpuval[i]
+				cpuidle := make(map[string]float64)
+				for i, pval := range cpuval {
+					cpuidle[fmt.Sprintf("cpu%d_idle", i)] = 1.0 - pval
 				}
 				c.mutex.Lock()
-				c.metadata = append(c.metadata, CPUMetadata{t, cpuval})
+				c.metadata = append(c.metadata, CPUMetadata{t, cpuidle})
 				c.mutex.Unlock()
 			}
 		}

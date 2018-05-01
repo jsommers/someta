@@ -62,12 +62,6 @@ func (r *RTTMetadata) Append(p *probe) {
 	r.Probes = append(r.Probes, *p)
 }
 
-/*
-protocol, probetype, dest, total_probes_emitted, total_probes_received
-maxttl probe_all_hops (t/f)
-for each; rtt, wirerecv, usersend, wiresend, recvttl seq
-*/
-
 // RTTMonitor collects RTT samples using ICMP
 type RTTMonitor struct {
 	stop     chan struct{}
@@ -76,7 +70,6 @@ type RTTMonitor struct {
 	verbose  bool
 	mutex    sync.Mutex
 
-	proto    string
 	ipDest   string
 	ipDestIP *net.IPAddr
 	useV4    bool
@@ -87,13 +80,16 @@ type RTTMonitor struct {
 	initialTTLs []int                    // Initial TTLs for probes
 	localAddrs  map[string]net.IP
 
-	maxTTL       int
-	hopLimited   bool
-	nextSequence int
-	allHops      bool
+	maxTTL          int
+	hopLimited      bool
+	nextSequence    int
+	allHops         bool
+	totalProbesSent int64
+	totalProbesRecv int64
 
 	interval time.Duration
 
+	pcapStats  *pcap.Stats
 	pcapHandle *pcap.Handle
 	v4Listener net.PacketConn
 	v4PktConn  *ipv4.PacketConn
@@ -112,7 +108,6 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	r.metadata = md
 	r.interval = defaultInterval
 
-	r.proto = "ip:1" // default
 	val, ok := config["dest"]
 	if !ok {
 		log.Fatalf(`%s monitor: Need "dest" in RTT monitor configuration`, name)
@@ -261,7 +256,14 @@ func (r *RTTMonitor) Stop() {
 }
 
 func (r *RTTMonitor) shutdown() {
+	stats, err := r.pcapHandle.Stats()
+	if err != nil {
+		log.Printf("%s monitor: error getting pcap stats: %v\n", r.name, err)
+	} else {
+		r.pcapStats = stats
+	}
 	r.pcapHandle.Close()
+	r.pcapHandle = nil
 	if r.useV4 {
 		r.v4Listener.Close()
 		r.v4PktConn.Close()
@@ -275,10 +277,28 @@ func (r *RTTMonitor) shutdown() {
 func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
-	// FIXME: Data should be map[string]interface{}
-	// FIXME: including some common things, as well as an embedded slice
-	// of all the probe samples
-	var md = MonitorMetadata{Name: r.name, Type: "monitor", Data: r.metadata}
+
+	metameta := make(map[string]interface{})
+
+	if r.pcapStats == nil && r.pcapHandle != nil {
+		stats, _ := r.pcapHandle.Stats()
+		r.pcapStats = stats
+	}
+	metameta["libpcap_stats"] = r.pcapStats
+	metameta["protocol"] = "icmp"
+	if r.hopLimited {
+		metameta["probetype"] = "hoplimited"
+	} else {
+		metameta["probetype"] = "ping"
+	}
+	metameta["total_probes_emitted"] = r.totalProbesSent
+	metameta["total_probes_received"] = r.totalProbesRecv
+	metameta["probe_all_hops"] = r.allHops
+	metameta["dest"] = r.ipDest
+	metameta["maxttl"] = r.maxTTL
+	metameta["probes"] = r.metadata
+
+	var md = MonitorMetadata{Name: r.name, Type: "monitor", Data: metameta}
 	sort.Sort(r.metadata)
 	err := encoder.Encode(md)
 	r.metadata = nil
@@ -364,6 +384,7 @@ func (r *RTTMonitor) updateIncomingProbe(icmpid int, icmpseq int, ts time.Time, 
 		log.Printf("Probe %d rtt %v\n", icmpseq, proberec.WireRecv.Sub(proberec.WireSend))
 	}
 	r.metadata.Append(proberec)
+	r.totalProbesRecv++
 }
 
 func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4) {
@@ -422,7 +443,7 @@ func (r *RTTMonitor) sweepProbes(all bool) {
 
 func (r *RTTMonitor) probeSweeper() {
 	// every 2 seconds, sweep through and remove "old" probes
-	t := time.NewTicker(2 * time.Second)
+	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
 	for {
 		select {
@@ -474,6 +495,7 @@ func (r *RTTMonitor) sendProbe() {
 		} else {
 			r.sendv6Probe(ident, ttl, payloadVal)
 		}
+		r.totalProbesSent++
 
 		var probe = &probe{
 			Dest:     r.ipDestIP.IP,
