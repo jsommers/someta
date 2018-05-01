@@ -399,7 +399,7 @@ func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4
 
 	if icmptype == layers.ICMPv4TypeEchoRequest && r.isMyICMPId(icmpid) {
 		r.updateOutgoingProbe(icmpid, icmpseq, ts, ip.SrcIP)
-
+		fmt.Println("checksum: ", icmp.Checksum)
 	} else if icmptype == layers.ICMPv4TypeEchoReply && r.isMyICMPId(icmpid) {
 		r.updateIncomingProbe(icmpid, icmpseq, ts, int(ip.TTL), ip.SrcIP)
 	} else if icmptype == layers.ICMPv4TypeTimeExceeded && icmpcode == layers.ICMPv4CodeTTLExceeded {
@@ -487,7 +487,9 @@ func (r *RTTMonitor) sendProbe() {
 	for i, ident := range r.probeIdents {
 		ttl := r.initialTTLs[i]
 
-		payloadVal := 65535 - (r.nextSequence % 65535)
+		// keep constant the checksum to deal with load balancers
+		// aka tokyo ping
+		payloadVal := 65535 - ((r.nextSequence + ident) % 65535)
 
 		now := time.Now()
 		if r.useV4 {
