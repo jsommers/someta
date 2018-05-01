@@ -25,7 +25,7 @@ const sometaVersion = "2018.04"
 var verboseOutput = false
 var quietOutput = false
 var logfileOutput = false
-var monitorRegex = regexp.MustCompile(`^([a-z]+)(:.+)*`)
+var monitorRegex = regexp.MustCompile(`^([a-z]+)(,.+)*`)
 var debugOutput = false
 
 type monitorConfig struct {
@@ -47,7 +47,7 @@ func (m *monitorConfig) Set(val string) error {
 
 	var name = configvals[1]
 	var mc = make(map[string]string)
-	for _, kvstr := range strings.Split(strings.Trim(configvals[2], " "), ":") {
+	for _, kvstr := range strings.Split(strings.Trim(configvals[2], " "), ",") {
 		kvitem := strings.Split(kvstr, "=")
 		if len(kvitem) < 1 || len(kvitem) > 2 {
 			log.Fatalf("Configuration key/val %s for %s formed incorrectly\n", kvstr, name)

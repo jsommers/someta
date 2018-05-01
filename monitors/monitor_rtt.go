@@ -8,6 +8,7 @@ import (
 	"github.com/google/gopacket/pcap"
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 	"io"
 	"log"
 	"net"
@@ -21,14 +22,15 @@ import (
 )
 
 type probe struct {
-	Source   net.IP    `json:"src"`
-	Dest     net.IP    `json:"dst"`
-	Sequence int       `json:"seq"`
-	SendTime time.Time `json:"sendtime"`
-	WireSend time.Time `json:"wiresend"`
-	WireRecv time.Time `json:"wirerecv"`
-	OutTTL   int       `json:"outttl"`
-	RecvTTL  int       `json:"recvttl"`
+	Source    net.IP    `json:"src"`
+	Dest      net.IP    `json:"dst"`
+	Responder net.IP    `json:"responder"`
+	Sequence  int       `json:"seq"`
+	SendTime  time.Time `json:"sendtime"`
+	WireSend  time.Time `json:"wiresend"`
+	WireRecv  time.Time `json:"wirerecv"`
+	OutTTL    int       `json:"outttl"`
+	RecvTTL   int       `json:"recvttl"`
 }
 
 func (p *probe) String() string {
@@ -95,6 +97,8 @@ type RTTMonitor struct {
 	pcapHandle *pcap.Handle
 	v4Listener net.PacketConn
 	v4PktConn  *ipv4.PacketConn
+	v6Listener net.PacketConn
+	v6PktConn  *ipv6.PacketConn
 }
 
 var nameRegex *regexp.Regexp
@@ -123,20 +127,14 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	}
 
 	r.hopLimited = false
-	val, ok = config["hoplimited"]
+	val, ok = config["type"]
 	if ok {
-		b, err := strconv.ParseBool(val)
-		if err != nil {
-			log.Fatalf("%s monitor: hoplimited probe parameter: %v", name, err)
+		if val == "hoplimited" {
+			r.hopLimited = true
+		} else if val != "ping" {
+			log.Fatalf("%s monitor unrecognized probe type %s\n", name, val)
 		}
-		r.hopLimited = b
-	} else {
-		if verbose {
-			log.Printf("%s monitor defaulting to ping mode\n", name)
-		}
-	}
-	if r.hopLimited {
-		log.Fatalf("%s monitor hop limited isn't tested yet\n", name)
+		delete(config, "type")
 	}
 
 	if ip4 := r.ipDestIP.IP.To4(); ip4 != nil {
@@ -156,6 +154,9 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	r.maxTTL = 64
 	val, ok = config["maxttl"]
 	if ok {
+		if !r.hopLimited {
+			log.Printf("%s monitor: warning: specifying maxttl for type=ping\n", name)
+		}
 		var err error
 		r.maxTTL, err = strconv.Atoi(val)
 		if err != nil {
@@ -173,6 +174,9 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	r.allHops = true
 	val, ok = config["allhops"]
 	if ok {
+		if !r.hopLimited {
+			log.Fatalf("%s monitor: allhops is incompatible with type=ping\n", name)
+		}
 		var err error
 		r.allHops, err = strconv.ParseBool(val)
 		if err != nil {
@@ -232,15 +236,21 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 		//    ...
 		//    maxttl-k = baseIdent+k
 		var mttl int
+		var i = 1
 		for mttl = r.maxTTL - 1; mttl > 0; mttl-- {
-			r.probeMap[baseIdent+1] = make(map[int]*probe)
-			r.probeIdents = append(r.probeIdents, baseIdent+1)
+			r.probeMap[baseIdent+i] = make(map[int]*probe)
+			r.probeIdents = append(r.probeIdents, baseIdent+i)
 			r.initialTTLs = append(r.initialTTLs, mttl)
+			i++
 		}
 	}
 
 	r.pcapSetup() // setup pcap listener (for both v4 and v6)
-	r.v4Listener, r.v4PktConn = v4SenderSetup()
+	if r.useV4 {
+		r.v4Listener, r.v4PktConn = v4SenderSetup()
+	} else {
+		r.v6Listener, r.v6PktConn = v6SenderSetup()
+	}
 
 	return nil
 }
@@ -252,8 +262,13 @@ func (r *RTTMonitor) Stop() {
 
 func (r *RTTMonitor) shutdown() {
 	r.pcapHandle.Close()
-	r.v4Listener.Close()
-	r.v4PktConn.Close()
+	if r.useV4 {
+		r.v4Listener.Close()
+		r.v4PktConn.Close()
+	} else {
+		r.v6Listener.Close()
+		r.v6PktConn.Close()
+	}
 }
 
 // Flush will write any current metadata to the writer
@@ -322,77 +337,70 @@ func (r *RTTMonitor) isMyIPAddr(addr net.IP) bool {
 	return ok
 }
 
-func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4) {
-	icmpid := int(icmp.Id)
-	icmpseq := int(icmp.Seq)
-	if !r.isMyICMPId(icmpid) {
-		return
+func (r *RTTMonitor) updateOutgoingProbe(icmpid int, icmpseq int, ts time.Time, ipaddr net.IP) {
+	// outgoing probe
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
+	proberec, ok := r.probeMap[icmpid][icmpseq]
+	if ok {
+		proberec.WireSend = ts
+		proberec.Source = ipaddr
 	}
-	icmptype := icmp.TypeCode.Type()
-	// icmpcode := icmp.TypeCode.Code()
+}
 
+func (r *RTTMonitor) updateIncomingProbe(icmpid int, icmpseq int, ts time.Time, ttl int, responder net.IP) {
+	// incoming probe
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 	proberec, ok := r.probeMap[icmpid][icmpseq]
 	if !ok {
 		return
 	}
+	proberec.WireRecv = ts
+	proberec.RecvTTL = ttl
+	proberec.Responder = responder
+	delete(r.probeMap[icmpid], icmpseq)
+	if r.verbose {
+		log.Printf("Probe %d rtt %v\n", icmpseq, proberec.WireRecv.Sub(proberec.WireSend))
+	}
+	r.metadata.Append(proberec)
+}
 
-	if r.isMyIPAddr(ip.SrcIP) && icmptype == layers.ICMPv4TypeEchoRequest {
-		// outgoing probe
-		proberec.WireSend = ts
-		proberec.Source = ip.SrcIP
-	} else if r.isMyIPAddr(ip.DstIP) && icmptype == layers.ICMPv4TypeEchoReply {
-		// incoming probe
-		proberec.WireRecv = ts
-		proberec.RecvTTL = int(ip.TTL)
-		delete(r.probeMap[icmpid], icmpseq)
-		if r.verbose {
-			log.Printf("Probe %d rtt %v\n", icmpseq, proberec.WireRecv.Sub(proberec.WireSend))
-		}
-		r.metadata.Append(proberec)
+func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4) {
+	if !(r.isMyIPAddr(ip.SrcIP) || r.isMyIPAddr(ip.DstIP)) {
+		return
 	}
 
-	/*
-		if icmptype == layers.ICMPv4TypeEchoRequest || icmptype == layers.ICMPv4TypeEchoReply {
-			// FIXME: need to deal with probeIdents as offsets for hop-limited probing
-			if int(icmphdr.Id) != probeIdent {
-				continue // not for us
-			}
-			fmt.Println("Probe is for us")
-		} else if icmptype == layers.ICMPv4TypeTimeExceeded && icmpcode == layers.ICMPv4CodeTTLExceeded {
-			payload := icmp4.LayerPayload()
-			fmt.Println("ttl exceeded", payload)
-			var nestedv4 layers.IPv4
-			var nestedicmpv4 layers.ICMPv4
-			parser := pkt.NewDecodingLayerParser(layers.LayerTypeIPv4, &nestedv4, &nestedicmpv4)
-			decoded := make([]pkt.LayerType, 2, 2)
-			parser.DecodeLayers(payload, &decoded)
-			if nestedv4.Protocol == layers.IPProtocolICMPv4 {
-				if int(nestedicmpv4.Id) != probeIdent {
-					fmt.Println("carcass is for us")
+	icmpid := int(icmp.Id)
+	icmpseq := int(icmp.Seq)
+	icmptype := icmp.TypeCode.Type()
+	icmpcode := icmp.TypeCode.Code()
 
-				}
+	if icmptype == layers.ICMPv4TypeEchoRequest && r.isMyICMPId(icmpid) {
+		r.updateOutgoingProbe(icmpid, icmpseq, ts, ip.SrcIP)
 
+	} else if icmptype == layers.ICMPv4TypeEchoReply && r.isMyICMPId(icmpid) {
+		r.updateIncomingProbe(icmpid, icmpseq, ts, int(ip.TTL), ip.SrcIP)
+	} else if icmptype == layers.ICMPv4TypeTimeExceeded && icmpcode == layers.ICMPv4CodeTTLExceeded {
+		// incoming TTL exceeded; maybe with a packaged probe
+		payload := icmp.LayerPayload()
+		var nestedv4 layers.IPv4
+		var nestedicmpv4 layers.ICMPv4
+		parser := pkt.NewDecodingLayerParser(layers.LayerTypeIPv4, &nestedv4, &nestedicmpv4)
+		decoded := make([]pkt.LayerType, 2, 2)
+		parser.DecodeLayers(payload, &decoded)
+		if nestedv4.Protocol == layers.IPProtocolICMPv4 {
+			nestedID := int(nestedicmpv4.Id)
+			if r.isMyICMPId(nestedID) {
+				nestedSeq := int(nestedicmpv4.Seq)
+				r.updateIncomingProbe(nestedID, nestedSeq, ts, int(ip.TTL), ip.SrcIP)
 			}
 		}
-		prec, direction := getProbeRec(iphdr.SrcIP, iphdr.DstIP, icmphdr.Seq)
-		if prec != nil {
-			if direction == outgoing {
-				prec.sendTime = ts
-			} else {
-				prec.recvTime = ts
-				delete(probeMap, int(icmphdr.Seq))
-				completeProbes = append(completeProbes, prec)
-			}
-		}
-		log.Println(ts, iphdr.SrcIP, iphdr.DstIP, icmphdr.TypeCode, icmphdr.Id, icmphdr.Seq, icmphdr.Payload)
-		log.Println(icmphdr)
-	*/
+	}
 }
 
 func (r *RTTMonitor) handleV6(ts time.Time, ip *layers.IPv6, icmp *layers.ICMPv6) {
-	log.Println("v6 packet receive isn't handled yet")
+	log.Println("v6 packet receive isn't handled yet", ts, ip, icmp)
 }
 
 func (r *RTTMonitor) sweepProbes(all bool) {
@@ -433,13 +441,15 @@ func (r *RTTMonitor) Run() error {
 	defer r.shutdown()
 
 	timer := time.NewTimer(gammaInterval(r.interval))
+	now := time.Now()
 	for {
 		select {
-		case <-timer.C:
+		case t := <-timer.C:
 			if r.verbose {
-				log.Printf("Sending probe %d\n", r.nextSequence)
+				log.Printf("Sending probe %d (gap %v)\n", r.nextSequence, t.Sub(now))
 			}
-			r.sendv4Probe()
+			now = time.Now()
+			r.sendProbe()
 			timer.Reset(gammaInterval(r.interval))
 
 		case <-r.stop:
@@ -451,39 +461,24 @@ func (r *RTTMonitor) Run() error {
 	}
 }
 
-func (r *RTTMonitor) sendv4Probe() {
+func (r *RTTMonitor) sendProbe() {
 	// emit probes for each hop being probed
 	for i, ident := range r.probeIdents {
 		ttl := r.initialTTLs[i]
 
 		payloadVal := 65535 - (r.nextSequence % 65535)
-		wm := icmp.Message{
-			Type: ipv4.ICMPTypeEcho, Code: 0,
-			Body: &icmp.Echo{
-				ID: ident,
-				Data: []byte{byte(payloadVal >> 8),
-					byte(payloadVal), 0, 0},
-			},
-		}
 
-		wm.Body.(*icmp.Echo).Seq = r.nextSequence
-		wb, err := wm.Marshal(nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if err := r.v4PktConn.SetTTL(ttl); err != nil {
-			log.Fatal(err)
-		}
-
-		if _, err := r.v4PktConn.WriteTo(wb, nil, r.ipDestIP); err != nil {
-			log.Fatal(err)
+		now := time.Now()
+		if r.useV4 {
+			r.sendv4Probe(ident, ttl, payloadVal)
+		} else {
+			r.sendv6Probe(ident, ttl, payloadVal)
 		}
 
 		var probe = &probe{
 			Dest:     r.ipDestIP.IP,
 			Sequence: r.nextSequence,
-			SendTime: time.Now(),
+			SendTime: now,
 			OutTTL:   ttl,
 		}
 		r.mutex.Lock()
@@ -491,6 +486,57 @@ func (r *RTTMonitor) sendv4Probe() {
 		r.mutex.Unlock()
 	}
 	r.nextSequence = (r.nextSequence + 1) % 65535
+
+}
+
+func (r *RTTMonitor) sendv4Probe(ident, ttl, payload int) {
+	wm := icmp.Message{
+		Type: ipv4.ICMPTypeEcho, Code: 0,
+		Body: &icmp.Echo{
+			ID: ident,
+			Data: []byte{byte(payload >> 8),
+				byte(payload), 0, 0},
+		},
+	}
+
+	wm.Body.(*icmp.Echo).Seq = r.nextSequence
+	wb, err := wm.Marshal(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := r.v4PktConn.SetTTL(ttl); err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := r.v4PktConn.WriteTo(wb, nil, r.ipDestIP); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (r *RTTMonitor) sendv6Probe(ident, ttl, payload int) {
+	wm := icmp.Message{
+		Type: ipv6.ICMPTypeEchoRequest, Code: 0,
+		Body: &icmp.Echo{
+			ID: ident,
+			Data: []byte{byte(payload >> 8),
+				byte(payload), 0, 0},
+		},
+	}
+
+	wm.Body.(*icmp.Echo).Seq = r.nextSequence
+	wb, err := wm.Marshal(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := r.v6PktConn.SetHopLimit(ttl); err != nil {
+		log.Fatal(err)
+	}
+
+	if _, err := r.v6PktConn.WriteTo(wb, nil, r.ipDestIP); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // NewRTTMonitor creates and returns a new RTTMonitor
@@ -559,16 +605,29 @@ func (r *RTTMonitor) pcapSetup() {
 	}
 
 	r.pcapHandle = handle
-	if err = r.pcapHandle.SetBPFFilter("icmp or icmp6"); err != nil {
+	filterstr := "icmp"
+	if !r.useV4 {
+		filterstr += "6"
+	}
+	if err = r.pcapHandle.SetBPFFilter(filterstr); err != nil {
 		log.Fatal(err)
 	}
 }
 
 func v4SenderSetup() (net.PacketConn, *ipv4.PacketConn) {
-	listener, err := net.ListenPacket("ip4:1", "0.0.0.0")
+	listener, err := net.ListenPacket("ip4:1", net.IPv4zero.String())
 	if err != nil {
 		log.Fatal(err)
 	}
 	netlayer := ipv4.NewPacketConn(listener)
+	return listener, netlayer
+}
+
+func v6SenderSetup() (net.PacketConn, *ipv6.PacketConn) {
+	listener, err := net.ListenPacket("ip6:58", net.IPv6zero.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+	netlayer := ipv6.NewPacketConn(listener)
 	return listener, netlayer
 }
