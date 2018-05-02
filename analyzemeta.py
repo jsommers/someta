@@ -1,3 +1,6 @@
+import sys
+import time
+import re
 import json
 import argparse
 from statistics import mean, stdev, median
@@ -13,32 +16,83 @@ def printstats(name, xlist):
     if len(xlist) >= 1:
         print("\tmedian: {}".format(median(xlist)))
 
-def analyze_rtt(key, xdict):
-    print("Analyzing {} ({})".format(key, xdict['probe_config']))
-    for rttkey in xdict.keys():
-        if rttkey.startswith('ttl') or rttkey == 'ping':
-            gatherandprint(rttkey, xdict[rttkey])
-    print("\nlibpcap info: recv: {recv}  pcapdrop: {pcapdrop}  " \
-          "ifdrop: {ifdrop}\n".format(**xdict['libpcap_stats']))
+def parse_ts(ts):
+    idx = ts.find('.')
+    st = time.strptime(ts[:idx], "%Y-%m-%dT%H:%M:%S")
+    unix = time.mktime(st)
+    mobj = re.match("^\.(\d+)([-+])(\d{2}):(\d{2})$", ts[idx:])
+    matchvals = mobj.groups()
+    subsec = float(f".{matchvals[0]}")
+    hroff = int(matchvals[2])
+    minoff = int(matchvals[3])
+    secoff = hroff * 3600 + minoff * 60
+    offset = int(f"{matchvals[1]}{secoff}")
+    unix += subsec
+    unix += offset
+    return unix
 
-def analyze_io(xli):
-    # busy_time?
-    if len(xli) == 0:
-        return
-    xd = xli[0][1]
-    #print(xd.keys())
+def zerotime(ts):
+    return ts == "0001-01-01T00:00:00Z"
 
-def analyze_cpu(xli):
+def analyze_probes(name, plist):
+
+    # data: {"src":"","dst":"8.8.8.8","responder":"192.168.100.254","seq":57,"sendtime":"2018-04-22T15:00:04.090593818-04 :00","wiresend":"0001-01-01T00:00:00Z","wirerecv":"2018-04-22T15:00:04.091623-04 :00","outttl":2,"recvttl":63}
+    print("Results for {}".format(name))
+    parse_ts(plist[0]['wiresend'])
+
+    lost = [ parse_ts(xd['sendtime']) for xd in plist \
+        if zerotime(xd['wiresend']) or zerotime(xd['wirerecv']) ]
+    rtt = [ parse_ts(xd['wirerecv']) - parse_ts(xd['wiresend']) for xd in plist \
+        if not zerotime(xd['wirerecv']) and not zerotime(xd['wiresend']) ]
+    sendtimes = [ parse_ts(xd['sendtime']) for xd in plist ]
+    senddiffs = [ sendtimes[i] - sendtimes[i-1] for i in range(1,len(sendtimes)) ]
+    print("Lost: {}".format(len(lost)))
+    printstats('rtt', rtt)
+    printstats('senddiffs', senddiffs)
+
+def analyze_rtt(name, data):
+    dest = data['dest']
+    maxttl = data['maxttl']
+    allhops = data['probe_all_hops']
+    probedata = data['probes']
+    probetype = data['probetype']
+    proto = data['protocol']
+    totalsent = data['total_probes_emitted']
+    totalrecv = data['total_probes_received']
+    print(name)
+    print(f"\t{proto} {probetype} probes to {dest} (maxttl: {maxttl}, allhops: {allhops})")
+    print("\tlibpcap info: recv: {PacketsReceived}  pcapdrop: {PacketsDropped}  " \
+          "ifdrop: {PacketsIfDropped}".format(**data['libpcap_stats']))
+
+    if probetype == 'hoplimited':
+        collated = defaultdict(list)
+        for xd in data['probes']:
+            key = "hop_{}".format(xd['outttl'])
+            collated[key].append(xd)
+    else:
+        collated = {'ping': data['probes']}
+
+    for name, plist in collated.items():
+        analyze_probes(name, plist)
+
+def analyze_io(name, xli):
+    # TBD
+    for xd in xli:
+        ts = xd['timestamp']
+        ct = xd['counters']
+
+def analyze_cpu(name, xli):
     if len(xli) == 0:
         return
     data = defaultdict(list)
     for xd in xli:
         # ts = xd['timestamp']
         idle = xd['cpuidle']
-        for i in range(len(idle)):
-            data['cpu{}'.format(i)].append(idle[i])
+        for k, v in idle.items():
+            data[k].append(v)
 
-    print("\nMean/stdev CPU idle:")
+    print(name)
+    print("\tMean/stdev CPU idle:")
     for k in sorted(data.keys()):
         m = mean(data[k])
         s = stdev(data[k])
@@ -47,14 +101,15 @@ def analyze_cpu(xli):
         if lowcpu > 0:
             print("\t\t{} measurements had low (<1%) idle CPU".format(lowcpu))
 
-def analyze_mem(xli):
+def analyze_mem(name, xli):
     if len(xli) == 0:
         return
-    available = [ xd['available'] for _,xd in xli ]
-    print("\nMemory available (Bytes) mean (stdev): {:.0f} ({:.0f})".format(
-        mean(available), stdev(available)))
+    available = [ xd['percent'] for xd in xli ]
+    print(name)
+    print("\tMemory available (percent) max: {:.0f} min: {:.0f}".format(
+        max(available), min(available)))
 
-def analyze_netcounters(xli):
+def analyze_netstat(name, xli):
     if len(xli) == 0:
         return
     keys_of_interest = []
@@ -73,33 +128,33 @@ def analyze_netcounters(xli):
             for k in keys_of_interest:
                 counters["{}_{}".format(netif, k)].append(ifdata[k])
 
-    print()
+    print(name)
     flag = False
     for k in sorted(keys_of_interest):
         s = sum(counters[k])
         if s > 0:
-            print("{}: count is non-zero ({})".format(k, s))
+            print("\t{}: count is non-zero ({})".format(k, s))
             flag = True
     if not flag:
-        print("No drops or errors in netstat counters")
+        print("\tNo drops or errors in netstat counters")
 
-def gatherandprint(rkey, xlist):
-    print("Results for {}".format(rkey))
-    lost = [ xd['usersend'] for ts,xd in xlist \
-        if isinf(xd['wiresend']) or isinf(xd['wirerecv']) ]
-    rtt = [ xd['wirerecv'] - xd['wiresend'] for ts,xd in xlist \
-        if not isinf(xd['wirerecv']) and not isinf(xd['wiresend']) ]
-    sendtimes = [ xd['usersend'] for ts,xd in xlist ]
-    senddiffs = [ sendtimes[i] - sendtimes[i-1] for i in range(1,len(sendtimes)) ]
-    print("Lost: {}".format(len(lost)))
-    printstats('rtt', rtt)
-    printstats('senddiffs', senddiffs)
+def print_sys(xd):
+    print("Metadata for {command}".format(**xd))
+    print(f"\tRun on {xd['sysinfo']['hostname']} at {xd['start']}")
+    print(f"\tCPUs: {len(xd['syscpu'])}")
+    print(f"\tTotal Memory: {xd['sysmem']['total']/1024/1024}MiB")
 
 def main():
     parser = argparse.ArgumentParser(
             description='Analyze RTTs...')
     parser.add_argument('jsonmeta', nargs=1)
     args = parser.parse_args()
+
+    monitor_analy = {'cpu': analyze_cpu,
+            'mem': analyze_mem,
+            'io': analyze_io,
+            'netstat': analyze_netstat,
+            'rtt': analyze_rtt}
 
     infile = args.jsonmeta[0]
     meta = {}
@@ -108,19 +163,9 @@ def main():
         for line in infileh:
             m = json.loads(line)
             if m['type'] == 'monitor':
-                meta['monitors'][m['name']] = m
-
-    for key in meta['monitors'].keys():
-        if key.startswith('rtt'):
-            analyze_rtt(key, meta['monitors'][key])
-    if 'cpu' in meta['monitors']:
-        analyze_cpu(meta['monitors']['cpu']['data'])
-    if 'mem' in meta['monitors']:
-        analyze_mem(meta['monitors']['mem']['data'])
-    if 'netstat' in meta['monitors']:
-        analyze_netcounters(meta['monitors']['netstat']['data'])
-    if 'io' in meta['monitors']:
-        analyze_io(meta['monitors']['io']['data'])
+                monitor_analy[m['name']](m['name'], m['data'])
+            elif m['type'] == 'system':
+                print_sys(m['data'])
 
 if __name__ == '__main__':
     main()

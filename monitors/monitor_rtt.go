@@ -39,7 +39,15 @@ func (p *probe) String() string {
 
 // RTTMetadata is a slice of probe samples.  It implements sort.Interface
 type RTTMetadata struct {
-	Probes []probe `json:"probes"`
+	Probes        []probe     `json:"probes"`
+	PcapStats     *pcap.Stats `json:"libpcap_stats"`
+	Protocol      string      `json:"protocol"`
+	Probetype     string      `json:"probetype"`
+	TotalEmitted  int64       `json:"total_probes_emitted"`
+	TotalReceived int64       `json:"total_probes_received"`
+	ProbeAllHops  bool        `json:"probe_all_hops"`
+	MaxTTL        int         `json:"maxttl"`
+	Dest          string      `json:"dest"`
 }
 
 // Len returns the number of probe samples
@@ -278,27 +286,24 @@ func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
 	r.mutex.Lock()
 	defer r.mutex.Unlock()
 
-	metameta := make(map[string]interface{})
-
 	if r.pcapStats == nil && r.pcapHandle != nil {
 		stats, _ := r.pcapHandle.Stats()
 		r.pcapStats = stats
 	}
-	metameta["libpcap_stats"] = r.pcapStats
-	metameta["protocol"] = "icmp"
+	r.metadata.PcapStats = r.pcapStats
+	r.metadata.Protocol = "icmp"
 	if r.hopLimited {
-		metameta["probetype"] = "hoplimited"
+		r.metadata.Probetype = "hoplimited"
 	} else {
-		metameta["probetype"] = "ping"
+		r.metadata.Probetype = "ping"
 	}
-	metameta["total_probes_emitted"] = r.totalProbesSent
-	metameta["total_probes_received"] = r.totalProbesRecv
-	metameta["probe_all_hops"] = r.allHops
-	metameta["dest"] = r.ipDest
-	metameta["maxttl"] = r.maxTTL
-	metameta["probes"] = r.metadata
+	r.metadata.TotalEmitted = r.totalProbesSent
+	r.metadata.TotalReceived = r.totalProbesRecv
+	r.metadata.Dest = r.ipDest
+	r.metadata.MaxTTL = r.maxTTL
+	r.metadata.ProbeAllHops = r.allHops
 
-	var md = MonitorMetadata{Name: r.name, Type: "monitor", Data: metameta}
+	var md = MonitorMetadata{Name: r.name, Type: "monitor", Data: r.metadata}
 	sort.Sort(r.metadata)
 	err := encoder.Encode(md)
 	r.metadata = nil
