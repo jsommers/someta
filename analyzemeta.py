@@ -10,11 +10,11 @@ from collections import defaultdict
 def printstats(name, xlist):
     print("{}".format(name))
     if len(xlist) >= 1:
-        print("\tmean: {}".format(mean(xlist)))
+        print("\t\tmean: {}".format(mean(xlist)))
     if len(xlist) >= 2:
-        print("\tstdev: {}".format(stdev(xlist)))
+        print("\t\tstdev: {}".format(stdev(xlist)))
     if len(xlist) >= 1:
-        print("\tmedian: {}".format(median(xlist)))
+        print("\t\tmedian: {}".format(median(xlist)))
 
 def parse_ts(ts):
     idx = ts.find('.')
@@ -35,9 +35,7 @@ def zerotime(ts):
     return ts == "0001-01-01T00:00:00Z"
 
 def analyze_probes(name, plist):
-
-    # data: {"src":"","dst":"8.8.8.8","responder":"192.168.100.254","seq":57,"sendtime":"2018-04-22T15:00:04.090593818-04 :00","wiresend":"0001-01-01T00:00:00Z","wirerecv":"2018-04-22T15:00:04.091623-04 :00","outttl":2,"recvttl":63}
-    print("Results for {}".format(name))
+    print("\tResults for {}".format(name))
     parse_ts(plist[0]['wiresend'])
 
     lost = [ parse_ts(xd['sendtime']) for xd in plist \
@@ -46,9 +44,9 @@ def analyze_probes(name, plist):
         if not zerotime(xd['wirerecv']) and not zerotime(xd['wiresend']) ]
     sendtimes = [ parse_ts(xd['sendtime']) for xd in plist ]
     senddiffs = [ sendtimes[i] - sendtimes[i-1] for i in range(1,len(sendtimes)) ]
-    print("Lost: {}".format(len(lost)))
-    printstats('rtt', rtt)
-    printstats('senddiffs', senddiffs)
+    print("\tLost: {}".format(len(lost)))
+    printstats('\trtt', rtt)
+    printstats('\tsenddiffs', senddiffs)
 
 def analyze_rtt(name, data):
     dest = data['dest']
@@ -163,7 +161,10 @@ def main():
         for line in infileh:
             m = json.loads(line)
             if m['type'] == 'monitor':
-                monitor_analy[m['name']](m['name'], m['data'])
+                name = m['name']
+                if m['name'].startswith('rtt'):
+                    name = 'rtt'
+                monitor_analy[name](m['name'], m['data'])
             elif m['type'] == 'system':
                 print_sys(m['data'])
 
