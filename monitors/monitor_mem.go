@@ -15,7 +15,7 @@ func init() {
 // MemoryMetadata encapsulates what it says
 type MemoryMetadata struct {
 	Timestamp   time.Time `json:"timestamp"`
-	UsedPercent float64   `json:"percent"`
+	UsedPercent float64   `json:"percent_used"`
 }
 
 // NewMemoryMonitor creates and returns a new MemoryMonitor

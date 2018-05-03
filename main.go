@@ -38,7 +38,6 @@ func (m *monitorConfig) String() string {
 
 func (m *monitorConfig) Set(val string) error {
 	configvals := monitorRegex.FindStringSubmatch(val)
-	fmt.Println(configvals)
 	if configvals == nil || len(configvals) <= 1 {
 		return fmt.Errorf("no monitor name match with %s; expected monname or monname,key1=val1,key2=val2", val)
 	}
