@@ -48,38 +48,32 @@ def analyze_probes(name, plist):
     printstats('\trtt', rtt)
     printstats('\tsenddiffs', senddiffs)
 
-def analyze_rtt(name, data):
-    dest = data['dest']
-    maxttl = data['maxttl']
-    allhops = data['probe_all_hops']
-    probedata = data['probes']
-    probetype = data['probetype']
-    proto = data['protocol']
-    totalsent = data['total_probes_emitted']
-    totalrecv = data['total_probes_received']
+def analyze_rtt(name, data, xd):
     print(name)
-    print(f"\t{proto} {probetype} probes to {dest} (maxttl: {maxttl}, allhops: {allhops})")
-    print("\tlibpcap info: recv: {PacketsReceived}  pcapdrop: {PacketsDropped}  " \
-          "ifdrop: {PacketsIfDropped}".format(**data['libpcap_stats']))
+    print("\t{protocol} {probetype} probes to {dest} (maxttl: {maxttl}, allhops: {probe_all_hops})".format(**xd))
+    print("\ttotal probes sent: {total_probes_emitted}, total probes received: {total_probes_received}".format(**xd))
+    if xd['libpcap_stats'] is not None:
+        print("\tlibpcap info: recv: {PacketsReceived}  pcapdrop: {PacketsDropped}  " \
+            "ifdrop: {PacketsIfDropped}".format(**xd['libpcap_stats']))
 
-    if probetype == 'hoplimited':
+    if xd['probetype'] == 'hoplimited':
         collated = defaultdict(list)
-        for xd in data['probes']:
-            key = "hop_{}".format(xd['outttl'])
-            collated[key].append(xd)
+        for probe in data:
+            key = "hop_{}".format(probe['outttl'])
+            collated[key].append(probe)
     else:
-        collated = {'ping': data['probes']}
+        collated = {'ping': data }
 
     for name, plist in collated.items():
         analyze_probes(name, plist)
 
-def analyze_io(name, xli):
+def analyze_io(name, xli, xd):
     # TBD
     for xd in xli:
         ts = xd['timestamp']
         ct = xd['counters']
 
-def analyze_cpu(name, xli):
+def analyze_cpu(name, xli, xd):
     if len(xli) == 0:
         return
     data = defaultdict(list)
@@ -99,15 +93,15 @@ def analyze_cpu(name, xli):
         if lowcpu > 0:
             print("\t\t{} measurements had low (<1%) idle CPU".format(lowcpu))
 
-def analyze_mem(name, xli):
+def analyze_mem(name, xli, xd):
     if len(xli) == 0:
         return
-    available = [ xd['percent'] for xd in xli ]
+    available = [ 100.0 - xd['percent_used'] for xd in xli ]
     print(name)
     print("\tMemory available (percent) max: {:.0f} min: {:.0f}".format(
         max(available), min(available)))
 
-def analyze_netstat(name, xli):
+def analyze_netstat(name, xli, xd):
     if len(xli) == 0:
         return
     keys_of_interest = []
@@ -137,7 +131,7 @@ def analyze_netstat(name, xli):
         print("\tNo drops or errors in netstat counters")
 
 def print_sys(xd):
-    print("Metadata for {command}".format(**xd))
+    print("Metadata for {command} (someta version {version})".format(**xd))
     print(f"\tRun on {xd['sysinfo']['hostname']} at {xd['start']}")
     print(f"\tCPUs: {len(xd['syscpu'])}")
     print(f"\tTotal Memory: {xd['sysmem']['total']/1024/1024}MiB")
@@ -162,11 +156,13 @@ def main():
             m = json.loads(line)
             if m['type'] == 'monitor':
                 name = m['name']
+                key = 'data'
                 if m['name'].startswith('rtt'):
                     name = 'rtt'
-                monitor_analy[name](m['name'], m['data'])
+                    key = 'probes'
+                monitor_analy[name](m['name'], m[key], m)
             elif m['type'] == 'system':
-                print_sys(m['data'])
+                print_sys(m['sysinfo'])
 
 if __name__ == '__main__':
     main()
