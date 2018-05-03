@@ -6,7 +6,6 @@ import (
 	"github.com/shirou/gopsutil/disk"
 	"log"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -27,21 +26,14 @@ func NewIOMonitor() MetadataGenerator {
 
 // IOMonitor collects io/disk usage metadata
 type IOMonitor struct {
-	stop           chan struct{}
+	Monitor
 	metadata       []IOMetadata
-	name           string
-	verbose        bool
-	mutex          sync.Mutex
-	interval       time.Duration
 	disksMonitored []string
 }
 
 // Init initializes an IOMonitor
 func (i *IOMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	i.name = name
-	i.verbose = verbose
-	i.interval = defaultInterval
-	i.stop = make(chan struct{})
+	i.baseInit(name, verbose, defaultInterval)
 	cmap, err := disk.IOCounters()
 	if err != nil {
 		log.Fatal(err)
@@ -64,7 +56,7 @@ func (i *IOMonitor) Init(name string, verbose bool, defaultInterval time.Duratio
 	for devname := range config {
 		_, ok := cmap[devname]
 		if !ok {
-			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", i.name, devname, strings.Join(alldevs, ","))
+			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(alldevs, ","))
 		}
 		i.disksMonitored = append(i.disksMonitored, devname)
 	}
@@ -78,7 +70,7 @@ func (i *IOMonitor) Init(name string, verbose bool, defaultInterval time.Duratio
 		if len(i.disksMonitored) > 1 {
 			plural = "s"
 		}
-		log.Printf("%s monitor: monitoring device%s %s\n", i.name, plural, strings.Join(i.disksMonitored, ","))
+		log.Printf("%s monitor: monitoring device%s %s\n", name, plural, strings.Join(i.disksMonitored, ","))
 	}
 	return nil
 }
@@ -91,13 +83,13 @@ func (i *IOMonitor) Run() error {
 		select {
 		case <-i.stop:
 			if i.verbose {
-				fmt.Printf("%s stopping\n", i.name)
+				fmt.Printf("%s stopping\n", i.Name)
 			}
 			return nil
 		case t := <-ticker.C:
 			iocounters, err := disk.IOCounters(i.disksMonitored...)
 			if err != nil {
-				log.Printf("%s: %v\n", i.name, err)
+				log.Printf("%s: %v\n", i.Name, err)
 			} else {
 				i.mutex.Lock()
 				var currCounters = make(map[string]disk.IOCountersStat)
@@ -111,20 +103,10 @@ func (i *IOMonitor) Run() error {
 	}
 }
 
-// Stop will (eventually) stop the IOMonitor
-func (i *IOMonitor) Stop() {
-	close(i.stop)
-}
-
 // Flush will write any current metadata to the writer
 func (i *IOMonitor) Flush(encoder *json.Encoder) error {
-	i.mutex.Lock()
-	defer i.mutex.Unlock()
-	var md = MonitorMetadata{Name: i.name, Type: "monitor", Data: i.metadata}
-	err := encoder.Encode(md)
+	i.Data = i.metadata
+	err := i.baseFlush(encoder)
 	i.metadata = nil
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

@@ -17,7 +17,6 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 )
 
@@ -72,11 +71,8 @@ func (r *RTTMetadata) Append(p *probe) {
 
 // RTTMonitor collects RTT samples using ICMP
 type RTTMonitor struct {
-	stop     chan struct{}
+	Monitor
 	metadata *RTTMetadata
-	name     string
-	verbose  bool
-	mutex    sync.Mutex
 
 	ipDest   string
 	ipDestIP *net.IPAddr
@@ -95,8 +91,6 @@ type RTTMonitor struct {
 	totalProbesSent int64
 	totalProbesRecv int64
 
-	interval time.Duration
-
 	pcapStats  *pcap.Stats
 	pcapHandle *pcap.Handle
 	v4Listener net.PacketConn
@@ -109,12 +103,9 @@ var nameRegex *regexp.Regexp
 
 // Init initializes an RTT monitor
 func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	r.name = name
-	r.verbose = verbose
-	r.stop = make(chan struct{})
+	r.baseInit(name, verbose, defaultInterval)
 	md := &RTTMetadata{}
 	r.metadata = md
-	r.interval = defaultInterval
 
 	val, ok := config["dest"]
 	if !ok {
@@ -258,15 +249,10 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	return nil
 }
 
-// Stop will (eventually) stop the RTTMonitor
-func (r *RTTMonitor) Stop() {
-	close(r.stop)
-}
-
 func (r *RTTMonitor) shutdown() {
 	stats, err := r.pcapHandle.Stats()
 	if err != nil {
-		log.Printf("%s monitor: error getting pcap stats: %v\n", r.name, err)
+		log.Printf("%s monitor: error getting pcap stats: %v\n", r.Name, err)
 	} else {
 		r.pcapStats = stats
 	}
@@ -283,10 +269,7 @@ func (r *RTTMonitor) shutdown() {
 
 // Flush will write any current metadata to the writer
 func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
-
-	if r.pcapStats == nil && r.pcapHandle != nil {
+	if r.pcapHandle != nil {
 		stats, _ := r.pcapHandle.Stats()
 		r.pcapStats = stats
 	}
@@ -303,14 +286,13 @@ func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
 	r.metadata.MaxTTL = r.maxTTL
 	r.metadata.ProbeAllHops = r.allHops
 
-	var md = MonitorMetadata{Name: r.name, Type: "monitor", Data: r.metadata}
 	sort.Sort(r.metadata)
-	err := encoder.Encode(md)
-	r.metadata = nil
-	if err != nil {
-		return err
-	}
-	return nil
+	r.Data = r.metadata
+	err := r.baseFlush(encoder)
+
+	md := &RTTMetadata{}
+	r.metadata = md
+	return err
 }
 
 func (r *RTTMonitor) pcapReader() {

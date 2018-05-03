@@ -75,6 +75,8 @@ var cpuAffinity = -1
 var monCfg = &monitorConfig{}
 var monitors map[string]someta.MetadataGenerator
 var waiter = &sync.WaitGroup{}
+var fileFlushInterval = 10 * time.Minute
+var fileRolloverInterval = 1 * time.Hour
 
 func init() {
 	monCfg.cfg = make(map[string]([]map[string]string))
@@ -91,6 +93,25 @@ func init() {
 	flag.DurationVar(&warmCool, "w", 1*time.Second, "Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected")
 	flag.IntVar(&cpuAffinity, "C", -1, "Set CPU affinity (default is not to set affinity)")
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
+	flag.DurationVar(&fileFlushInterval, "F", 10*time.Minute, "Time period after which in-memory metadata will be flushed to file")
+	flag.DurationVar(&fileRolloverInterval, "R", 1*time.Hour, "Time period after which metadata output will rollover to a new file")
+}
+
+func configureMonitors() {
+	for mName, mCfgSlice := range monCfg.cfg {
+		for idx, mCfg := range mCfgSlice {
+			var instanceName = mName
+			if len(mCfgSlice) > 1 {
+				instanceName = fmt.Sprintf("%s%d", mName, idx)
+			}
+			mon := someta.GetMonitor(mName)
+			err := mon.Init(instanceName, verboseOutput, monitorInterval, mCfg)
+			if err != nil {
+				log.Fatal(err)
+			}
+			monitors[instanceName] = mon
+		}
+	}
 }
 
 func startMonitors() {
@@ -130,6 +151,39 @@ func fileBase() string {
 	return outfileBase + "_" + tstr
 }
 
+func createMetaFile() (outfile *os.File, encoder *json.Encoder) {
+	// open metadata output
+	if !debugOutput {
+		outfile, err := os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		encoder = json.NewEncoder(outfile)
+	} else {
+		encoder = json.NewEncoder(os.Stdout)
+		encoder.SetIndent("", "  ")
+		outfile = os.Stdout
+	}
+	return outfile, encoder
+}
+
+func getSystemMetadata() *someta.Monitor {
+	sysinfo := make(map[string]interface{})
+	sysdescription, _ := host.Info()
+	sysinfo["someta"], _ = os.Executable()
+	sysinfo["sysinfo"] = sysdescription
+	sysinfo["command"] = commandLine
+	sysinfo["version"] = sometaVersion
+	sysinfo["start"] = time.Now()
+	cpuinfo, _ := cpu.Info()
+	sysinfo["syscpu"] = cpuinfo
+	meminfo, _ := mem.VirtualMemory()
+	sysinfo["sysmem"] = meminfo
+	netinfo, _ := net.Interfaces()
+	sysinfo["sysnet"] = netinfo
+	return &someta.Monitor{Name: "someta", Type: "system", Data: sysinfo}
+}
+
 func main() {
 	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
@@ -146,21 +200,7 @@ func main() {
 		log.Fatalln("No command specified; exiting.")
 	}
 
-	for mName, mCfgSlice := range monCfg.cfg {
-		for idx, mCfg := range mCfgSlice {
-			var instanceName = mName
-			if len(mCfgSlice) > 1 {
-				instanceName = fmt.Sprintf("%s%d", mName, idx)
-			}
-			mon := someta.GetMonitor(mName)
-			err := mon.Init(instanceName, verboseOutput, monitorInterval, mCfg)
-			if err != nil {
-				log.Fatal(err)
-			}
-			monitors[instanceName] = mon
-		}
-	}
-
+	configureMonitors() // side effect: modify monitors map
 	if len(monitors) == 0 {
 		log.Fatalln("No monitors configured; exiting.")
 	}
@@ -170,41 +210,17 @@ func main() {
 		log.Printf("Not writing metadata to file (writing to stdout)")
 	}
 
-	// open metadata output
-	var encoder *json.Encoder
-	if !debugOutput {
-		metaOut, err := os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer metaOut.Close()
-		encoder = json.NewEncoder(metaOut)
-	} else {
-		encoder = json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-	}
+	start := time.Now()
+	md := getSystemMetadata()
 
-	sysinfo := make(map[string]interface{})
-	sysdescription, _ := host.Info()
-	sysinfo["someta"], _ = os.Executable()
-	sysinfo["sysinfo"] = sysdescription
-	sysinfo["command"] = commandLine
-	sysinfo["version"] = sometaVersion
-	var start = time.Now()
-	sysinfo["start"] = start
-	cpuinfo, _ := cpu.Info()
-	sysinfo["syscpu"] = cpuinfo
-	meminfo, _ := mem.VirtualMemory()
-	sysinfo["sysmem"] = meminfo
-	netinfo, _ := net.Interfaces()
-	sysinfo["sysnet"] = netinfo
-	md := someta.MonitorMetadata{Name: "someta", Type: "system", Data: sysinfo}
+	outfile, encoder := createMetaFile()
+	encoder.Encode(*md)
 
-	// start monitors
-	startMonitors()
+	startMonitors() // side effect: each monitor started in its own goroutine
 
 	time.Sleep(warmCool)
 
+	// start the main command
 	cmdOutput := make(chan string)
 	go func() {
 		cmdarr := strings.Split(commandLine, " ")
@@ -221,12 +237,19 @@ func main() {
 		cmdOutput <- outbuf.String()
 	}()
 
+	// set up the main thread's loop
 	statusTicker := time.NewTicker(statusInterval)
 	defer statusTicker.Stop()
+	rolloverTicker := time.NewTicker(fileRolloverInterval)
+	defer rolloverTicker.Stop()
+	fileFlushTicker := time.NewTicker(fileFlushInterval)
+	defer fileFlushTicker.Stop()
+
 	done := false
 	for !done {
 		select {
 		case output := <-cmdOutput:
+			sysinfo := md.Data.(map[string]interface{})
 			sysinfo["command_output"] = output
 			done = true
 		case t := <-statusTicker.C:
@@ -235,6 +258,15 @@ func main() {
 				diff := t.Sub(start)
 				log.Printf("after %v cpu idle %3.2f%%\n", diff.Round(time.Second), 100-cpupct[0])
 			}
+		case <-rolloverTicker.C:
+			log.Println("Metadata file rollover")
+			if outfile != os.Stdout {
+				outfile.Close()
+			}
+			outfile, encoder = createMetaFile()
+			encoder.Encode(*md)
+		case <-fileFlushTicker.C:
+			flushMonitorMetadata(encoder)
 		}
 	}
 
@@ -246,10 +278,11 @@ func main() {
 	waiter.Wait()
 
 	// write out metadata
-	sysinfo["end"] = time.Now()
-	encoder.Encode(md)
 	flushMonitorMetadata(encoder)
 	if verboseOutput {
 		log.Println("done")
+	}
+	if outfile != os.Stdout {
+		outfile.Close()
 	}
 }

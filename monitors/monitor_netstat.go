@@ -7,7 +7,6 @@ import (
 	"log"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -28,21 +27,14 @@ func NewNetstatMonitor() MetadataGenerator {
 
 // NetstatMonitor collects network interface countesr metadata
 type NetstatMonitor struct {
-	stop            chan struct{}
+	Monitor
 	metadata        []NetstatMetadata
-	name            string
-	verbose         bool
-	mutex           sync.Mutex
-	interval        time.Duration
 	ifacesMonitored []string
 }
 
 // Init initializes a NetstatMonitor
 func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	n.name = name
-	n.verbose = verbose
-	n.stop = make(chan struct{})
-	n.interval = defaultInterval
+	n.baseInit(name, verbose, defaultInterval)
 	ifaces, err := net.Interfaces()
 	if err != nil {
 		log.Fatal(err)
@@ -66,7 +58,7 @@ func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Du
 	for devname := range config {
 		idx := sort.SearchStrings(allintf, devname)
 		if idx == len(allintf) || allintf[idx] != devname {
-			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", n.name, devname, strings.Join(allintf, ","))
+			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(allintf, ","))
 		}
 		n.ifacesMonitored = append(n.ifacesMonitored, devname)
 	}
@@ -83,7 +75,7 @@ func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Du
 		if len(n.ifacesMonitored) > 1 {
 			plural = "s"
 		}
-		log.Printf("%s monitor: monitoring device%s %s\n", n.name, plural, strings.Join(n.ifacesMonitored, ","))
+		log.Printf("%s monitor: monitoring device%s %s\n", name, plural, strings.Join(n.ifacesMonitored, ","))
 	}
 	return nil
 }
@@ -96,7 +88,7 @@ func (n *NetstatMonitor) Run() error {
 		select {
 		case <-n.stop:
 			if n.verbose {
-				fmt.Printf("%s stopping\n", n.name)
+				fmt.Printf("%s stopping\n", n.Name)
 			}
 			return nil
 		case t := <-ticker.C:
@@ -109,7 +101,7 @@ func (n *NetstatMonitor) Run() error {
 				}
 			}
 			if err != nil {
-				log.Printf("%s: %v\n", n.name, err)
+				log.Printf("%s: %v\n", n.Name, err)
 			} else {
 				n.mutex.Lock()
 				n.metadata = append(n.metadata, NetstatMetadata{t, countermap})
@@ -119,20 +111,10 @@ func (n *NetstatMonitor) Run() error {
 	}
 }
 
-// Stop will (eventually) stop the NetstatMonitor
-func (n *NetstatMonitor) Stop() {
-	close(n.stop)
-}
-
 // Flush will write any current metadata to the writer
 func (n *NetstatMonitor) Flush(encoder *json.Encoder) error {
-	n.mutex.Lock()
-	defer n.mutex.Unlock()
-	var md = MonitorMetadata{Name: n.name, Type: "monitor", Data: n.metadata}
-	err := encoder.Encode(md)
+	n.Data = n.metadata
+	err := n.baseFlush(encoder)
 	n.metadata = nil
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

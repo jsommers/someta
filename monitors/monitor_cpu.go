@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/shirou/gopsutil/cpu"
 	"log"
-	"sync"
 	"time"
 )
 
@@ -26,20 +25,13 @@ func NewCPUMonitor() MetadataGenerator {
 
 // CPUMonitor collects cpu usage metadata
 type CPUMonitor struct {
-	stop     chan struct{}
+	Monitor
 	metadata []CPUMetadata
-	name     string
-	verbose  bool
-	mutex    sync.Mutex
-	interval time.Duration
 }
 
 // Init initializes a CPUMonitor
 func (c *CPUMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	c.name = name
-	c.verbose = verbose
-	c.stop = make(chan struct{})
-	c.interval = defaultInterval
+	c.baseInit(name, verbose, defaultInterval)
 	intstr, ok := config["interval"]
 	if ok {
 		interval, err := time.ParseDuration(intstr)
@@ -63,16 +55,16 @@ func (c *CPUMonitor) Run() error {
 		select {
 		case <-c.stop:
 			if c.verbose {
-				fmt.Printf("%s stopping\n", c.name)
+				fmt.Printf("%s stopping\n", c.Name)
 			}
 			return nil
 		case t := <-ticker.C:
 			cpuval, err := cpu.Percent(0, true)
 			if err != nil {
-				log.Printf("%s: %v\n", c.name, err)
+				log.Printf("%s: %v\n", c.Name, err)
 			} else {
 				if c.verbose {
-					log.Printf("%s: %v\n", c.name, cpuval)
+					log.Printf("%s: %v\n", c.Name, cpuval)
 				}
 				cpuidle := make(map[string]float64)
 				for i, pval := range cpuval {
@@ -86,20 +78,10 @@ func (c *CPUMonitor) Run() error {
 	}
 }
 
-// Stop will (eventually) stop the CPUMonitor
-func (c *CPUMonitor) Stop() {
-	close(c.stop)
-}
-
 // Flush will write any current metadata to the writer
 func (c *CPUMonitor) Flush(encoder *json.Encoder) error {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	var md = MonitorMetadata{Name: c.name, Type: "monitor", Data: c.metadata}
-	err := encoder.Encode(md)
+	c.Data = c.metadata
+	err := c.baseFlush(encoder)
 	c.metadata = nil
-	if err != nil {
-		return err
-	}
-	return nil
+	return err
 }

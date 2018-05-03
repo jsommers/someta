@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -16,11 +17,38 @@ type MetadataGenerator interface {
 	Flush(*json.Encoder) error
 }
 
-// MonitorMetadata encapsulates metadata collected by a specific monitor
-type MonitorMetadata struct {
+// Monitor encapsulates elements common to all monitors
+type Monitor struct {
 	Name string      `json:"name"`
 	Type string      `json:"type"`
 	Data interface{} `json:"data"`
+
+	stop     chan struct{}
+	verbose  bool
+	mutex    sync.Mutex
+	interval time.Duration
+}
+
+// Stop closes a channel to signal that the monitor should stop
+func (m *Monitor) Stop() {
+	close(m.stop)
+}
+
+func (m *Monitor) baseInit(name string, verbose bool, defaultInterval time.Duration) {
+	m.Name = name
+	m.Type = "monitor"
+	m.stop = make(chan struct{})
+	m.interval = defaultInterval
+}
+
+func (m *Monitor) baseFlush(encoder *json.Encoder) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	err := encoder.Encode(m)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 var monitorRegistry map[string](func() MetadataGenerator)
