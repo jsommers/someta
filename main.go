@@ -151,27 +151,15 @@ func fileBase() string {
 	return outfileBase + "_" + tstr
 }
 
-func createMetaFile() (outfile *os.File, encoder *json.Encoder) {
-	// open metadata output
-	if !debugOutput {
-		outfile, err := os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		encoder = json.NewEncoder(outfile)
-	} else {
-		encoder = json.NewEncoder(os.Stdout)
-		encoder.SetIndent("", "  ")
-		outfile = os.Stdout
-	}
-	return outfile, encoder
-}
-
 // SystemMetadata captures OS and hardware config information
 type SystemMetadata struct {
 	someta.Monitor
 	SystemInfo    map[string]interface{} `json:"sysinfo"`
 	CommandOutput string                 `json:"command_output"`
+
+	logfile        *os.File
+	metadataOutput *os.File
+	encoder        *json.Encoder
 }
 
 func (s *SystemMetadata) init() {
@@ -190,6 +178,42 @@ func (s *SystemMetadata) init() {
 	s.SystemInfo["sysmem"] = meminfo
 	netinfo, _ := net.Interfaces()
 	s.SystemInfo["sysnet"] = netinfo
+
+	if logfileOutput {
+		var err error
+		s.logfile, err = os.OpenFile(fileBase()+".log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.SetOutput(s.logfile)
+	}
+}
+
+func (s *SystemMetadata) cleanup() {
+	s.logfile.Close()
+	if !debugOutput {
+		s.metadataOutput.Close()
+	}
+}
+
+func (s *SystemMetadata) rolloverMetadata() {
+	// open metadata output
+	if !debugOutput {
+		if s.metadataOutput != nil {
+			s.metadataOutput.Close()
+		}
+
+		var err error
+		s.metadataOutput, err = os.OpenFile(fileBase()+".json", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+		s.encoder = json.NewEncoder(s.metadataOutput)
+	} else {
+		s.encoder = json.NewEncoder(os.Stdout)
+		s.encoder.SetIndent("", "  ")
+	}
+	s.encoder.Encode(s) // put system metadata at the head of metadata file
 }
 
 func main() {
@@ -199,15 +223,7 @@ func main() {
 	start := time.Now()
 	md := &SystemMetadata{}
 	md.init()
-
-	if logfileOutput {
-		logfile, err := os.OpenFile(fileBase()+".log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.SetOutput(logfile)
-		defer logfile.Close()
-	}
+	defer md.cleanup()
 
 	if len(commandLine) == 0 {
 		log.Fatalln("No command specified; exiting.")
@@ -218,13 +234,12 @@ func main() {
 		log.Fatalln("No monitors configured; exiting.")
 	}
 
+	md.rolloverMetadata()
+
 	log.Printf("Starting someta with verbose %v and command <%s>\n", verboseOutput, commandLine)
 	if debugOutput {
 		log.Printf("Not writing metadata to file (writing to stdout)")
 	}
-
-	outfile, encoder := createMetaFile()
-	encoder.Encode(*md)
 
 	startMonitors() // side effect: each monitor started in its own goroutine
 
@@ -269,13 +284,9 @@ func main() {
 			}
 		case <-rolloverTicker.C:
 			log.Println("Metadata file rollover")
-			if outfile != os.Stdout {
-				outfile.Close()
-			}
-			outfile, encoder = createMetaFile()
-			encoder.Encode(*md)
+			md.rolloverMetadata()
 		case <-fileFlushTicker.C:
-			flushMonitorMetadata(encoder)
+			flushMonitorMetadata(md.encoder)
 		}
 	}
 
@@ -287,11 +298,8 @@ func main() {
 	waiter.Wait()
 
 	// write out metadata
-	flushMonitorMetadata(encoder)
+	flushMonitorMetadata(md.encoder)
 	if verboseOutput {
 		log.Println("done")
-	}
-	if outfile != os.Stdout {
-		outfile.Close()
 	}
 }
