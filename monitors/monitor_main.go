@@ -19,9 +19,8 @@ type MetadataGenerator interface {
 
 // Monitor encapsulates elements common to all monitors
 type Monitor struct {
-	Name string      `json:"name"`
-	Type string      `json:"type"`
-	Data interface{} `json:"data"`
+	Name string `json:"name"`
+	Type string `json:"type"`
 
 	stop     chan struct{}
 	verbose  bool
@@ -42,8 +41,7 @@ func (m *Monitor) baseInit(name string, verbose bool, defaultInterval time.Durat
 }
 
 func (m *Monitor) baseFlush(encoder *json.Encoder) error {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
+	// assumes that m.mutex is held!
 	err := encoder.Encode(m)
 	if err != nil {
 		return err

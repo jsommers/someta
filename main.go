@@ -167,26 +167,39 @@ func createMetaFile() (outfile *os.File, encoder *json.Encoder) {
 	return outfile, encoder
 }
 
-func getSystemMetadata() *someta.Monitor {
-	sysinfo := make(map[string]interface{})
+// SystemMetadata captures OS and hardware config information
+type SystemMetadata struct {
+	someta.Monitor
+	SystemInfo    map[string]interface{} `json:"sysinfo"`
+	CommandOutput string                 `json:"command_output"`
+}
+
+func (s *SystemMetadata) init() {
+	s.Name = "someta"
+	s.Type = "system"
+	s.SystemInfo = make(map[string]interface{})
 	sysdescription, _ := host.Info()
-	sysinfo["someta"], _ = os.Executable()
-	sysinfo["sysinfo"] = sysdescription
-	sysinfo["command"] = commandLine
-	sysinfo["version"] = sometaVersion
-	sysinfo["start"] = time.Now()
+	s.SystemInfo["someta"], _ = os.Executable()
+	s.SystemInfo["sysinfo"] = sysdescription
+	s.SystemInfo["command"] = commandLine
+	s.SystemInfo["version"] = sometaVersion
+	s.SystemInfo["start"] = time.Now()
 	cpuinfo, _ := cpu.Info()
-	sysinfo["syscpu"] = cpuinfo
+	s.SystemInfo["syscpu"] = cpuinfo
 	meminfo, _ := mem.VirtualMemory()
-	sysinfo["sysmem"] = meminfo
+	s.SystemInfo["sysmem"] = meminfo
 	netinfo, _ := net.Interfaces()
-	sysinfo["sysnet"] = netinfo
-	return &someta.Monitor{Name: "someta", Type: "system", Data: sysinfo}
+	s.SystemInfo["sysnet"] = netinfo
 }
 
 func main() {
 	flag.Parse()
 	rand.Seed(time.Now().UnixNano())
+
+	start := time.Now()
+	md := &SystemMetadata{}
+	md.init()
+
 	if logfileOutput {
 		logfile, err := os.OpenFile(fileBase()+".log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
@@ -209,9 +222,6 @@ func main() {
 	if debugOutput {
 		log.Printf("Not writing metadata to file (writing to stdout)")
 	}
-
-	start := time.Now()
-	md := getSystemMetadata()
 
 	outfile, encoder := createMetaFile()
 	encoder.Encode(*md)
@@ -249,8 +259,7 @@ func main() {
 	for !done {
 		select {
 		case output := <-cmdOutput:
-			sysinfo := md.Data.(map[string]interface{})
-			sysinfo["command_output"] = output
+			md.CommandOutput = output
 			done = true
 		case t := <-statusTicker.C:
 			if !quietOutput {

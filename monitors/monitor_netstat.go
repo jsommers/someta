@@ -25,10 +25,10 @@ func NewNetstatMonitor() MetadataGenerator {
 	return new(NetstatMonitor)
 }
 
-// NetstatMonitor collects network interface countesr metadata
+// NetstatMonitor collects network interface counters metadata
 type NetstatMonitor struct {
 	Monitor
-	metadata        []NetstatMetadata
+	Data            []NetstatMetadata `json:"data"`
 	ifacesMonitored []string
 }
 
@@ -104,7 +104,7 @@ func (n *NetstatMonitor) Run() error {
 				log.Printf("%s: %v\n", n.Name, err)
 			} else {
 				n.mutex.Lock()
-				n.metadata = append(n.metadata, NetstatMetadata{t, countermap})
+				n.Data = append(n.Data, NetstatMetadata{t, countermap})
 				n.mutex.Unlock()
 			}
 		}
@@ -113,8 +113,9 @@ func (n *NetstatMonitor) Run() error {
 
 // Flush will write any current metadata to the writer
 func (n *NetstatMonitor) Flush(encoder *json.Encoder) error {
-	n.Data = n.metadata
+	n.mutex.Lock()
+	defer n.mutex.Unlock()
 	err := n.baseFlush(encoder)
-	n.metadata = nil
+	n.Data = nil
 	return err
 }

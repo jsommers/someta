@@ -27,7 +27,7 @@ func NewIOMonitor() MetadataGenerator {
 // IOMonitor collects io/disk usage metadata
 type IOMonitor struct {
 	Monitor
-	metadata       []IOMetadata
+	Data           []IOMetadata `json:"data"`
 	disksMonitored []string
 }
 
@@ -96,7 +96,7 @@ func (i *IOMonitor) Run() error {
 				for _, devname := range i.disksMonitored {
 					currCounters[devname] = iocounters[devname]
 				}
-				i.metadata = append(i.metadata, IOMetadata{t, currCounters})
+				i.Data = append(i.Data, IOMetadata{t, currCounters})
 				i.mutex.Unlock()
 			}
 		}
@@ -105,8 +105,9 @@ func (i *IOMonitor) Run() error {
 
 // Flush will write any current metadata to the writer
 func (i *IOMonitor) Flush(encoder *json.Encoder) error {
-	i.Data = i.metadata
+	i.mutex.Lock()
+	defer i.mutex.Unlock()
 	err := i.baseFlush(encoder)
-	i.metadata = nil
+	i.Data = nil
 	return err
 }

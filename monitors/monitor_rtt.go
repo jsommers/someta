@@ -46,7 +46,7 @@ type RTTMetadata struct {
 	TotalReceived int64       `json:"total_probes_received"`
 	ProbeAllHops  bool        `json:"probe_all_hops"`
 	MaxTTL        int         `json:"maxttl"`
-	Dest          string      `json:"dest"`
+	IPDest        string      `json:"dest"`
 }
 
 // Len returns the number of probe samples
@@ -72,24 +72,18 @@ func (r *RTTMetadata) Append(p *probe) {
 // RTTMonitor collects RTT samples using ICMP
 type RTTMonitor struct {
 	Monitor
-	metadata *RTTMetadata
+	RTTMetadata
 
-	ipDest   string
-	ipDestIP *net.IPAddr
-	useV4    bool
-	netDev   string
+	destIPAddr *net.IPAddr
+	useV4      bool
+	netDev     string
 
 	probeMap    map[int](map[int]*probe) //map from ident to seq/probe
 	probeIdents []int                    // ICMP Ids for probes
 	initialTTLs []int                    // Initial TTLs for probes
 	localAddrs  map[string]net.IP
 
-	maxTTL          int
-	hopLimited      bool
-	nextSequence    int
-	allHops         bool
-	totalProbesSent int64
-	totalProbesRecv int64
+	nextSequence int
 
 	pcapStats  *pcap.Stats
 	pcapHandle *pcap.Handle
@@ -104,34 +98,32 @@ var nameRegex *regexp.Regexp
 // Init initializes an RTT monitor
 func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	r.baseInit(name, verbose, defaultInterval)
-	md := &RTTMetadata{}
-	r.metadata = md
 
 	val, ok := config["dest"]
 	if !ok {
 		log.Fatalf(`%s monitor: Need "dest" in RTT monitor configuration`, name)
 	}
-	r.ipDest = val
+	r.IPDest = val
 	delete(config, "dest")
 
 	var err error
-	r.ipDestIP, err = net.ResolveIPAddr("ip", r.ipDest)
+	r.destIPAddr, err = net.ResolveIPAddr("ip", val)
 	if err != nil {
-		log.Fatalf("%s monitor: couldn't parse destination IP address %s: %v\n", name, r.ipDest, err)
+		log.Fatalf("%s monitor: couldn't parse destination IP address %s: %v\n", name, val, err)
 	}
 
-	r.hopLimited = false
+	hopLimited := false
 	val, ok = config["type"]
 	if ok {
 		if val == "hoplimited" {
-			r.hopLimited = true
+			hopLimited = true
 		} else if val != "ping" {
 			log.Fatalf("%s monitor unrecognized probe type %s\n", name, val)
 		}
 		delete(config, "type")
 	}
 
-	if ip4 := r.ipDestIP.IP.To4(); ip4 != nil {
+	if ip4 := r.destIPAddr.IP.To4(); ip4 != nil {
 		r.useV4 = true
 	} else {
 		r.useV4 = false
@@ -145,34 +137,34 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	r.netDev = val
 	delete(config, "interface")
 
-	r.maxTTL = 64
+	r.MaxTTL = 64
 	val, ok = config["maxttl"]
 	if ok {
-		if !r.hopLimited {
+		if !hopLimited {
 			log.Printf("%s monitor: warning: specifying maxttl for type=ping\n", name)
 		}
 		var err error
-		r.maxTTL, err = strconv.Atoi(val)
+		r.MaxTTL, err = strconv.Atoi(val)
 		if err != nil {
 			log.Fatalf("%s monitor: parsing maxttl: %v\n", name, err)
 		}
-		if r.maxTTL <= 0 || r.maxTTL > 255 {
-			log.Fatalf("%s monitor: invalid value %d for hopcount\n", name, r.maxTTL)
+		if r.MaxTTL <= 0 || r.MaxTTL > 255 {
+			log.Fatalf("%s monitor: invalid value %d for hopcount\n", name, r.MaxTTL)
 		}
-		if r.hopLimited && r.maxTTL > 32 {
+		if hopLimited && r.MaxTTL > 32 {
 			log.Fatalf("%s monitor: maxTTL too big for hop-limited probe", name)
 		}
 	}
 	delete(config, "maxttl")
 
-	r.allHops = true
+	r.ProbeAllHops = true
 	val, ok = config["allhops"]
 	if ok {
-		if !r.hopLimited {
+		if !hopLimited {
 			log.Fatalf("%s monitor: allhops is incompatible with type=ping\n", name)
 		}
 		var err error
-		r.allHops, err = strconv.ParseBool(val)
+		r.ProbeAllHops, err = strconv.ParseBool(val)
 		if err != nil {
 			log.Fatalf("%s monitor: can't parse allhops config: %s : %v\n", name, val, err)
 		}
@@ -222,8 +214,8 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	}
 	r.probeMap[baseIdent] = make(map[int]*probe)
 	r.probeIdents = append(r.probeIdents, baseIdent)
-	r.initialTTLs = append(r.initialTTLs, r.maxTTL)
-	if r.hopLimited && r.allHops {
+	r.initialTTLs = append(r.initialTTLs, r.MaxTTL)
+	if hopLimited && r.ProbeAllHops {
 		// for hop-limited:
 		//    maxttl = baseIdent
 		//    maxttl-1 = baseIdent+1
@@ -231,12 +223,19 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 		//    maxttl-k = baseIdent+k
 		var mttl int
 		var i = 1
-		for mttl = r.maxTTL - 1; mttl > 0; mttl-- {
+		for mttl = r.MaxTTL - 1; mttl > 0; mttl-- {
 			r.probeMap[baseIdent+i] = make(map[int]*probe)
 			r.probeIdents = append(r.probeIdents, baseIdent+i)
 			r.initialTTLs = append(r.initialTTLs, mttl)
 			i++
 		}
+	}
+	r.PcapStats = r.pcapStats
+	r.Protocol = "icmp"
+	if hopLimited {
+		r.Probetype = "hoplimited"
+	} else {
+		r.Probetype = "ping"
 	}
 
 	r.pcapSetup() // setup pcap listener (for both v4 and v6)
@@ -269,29 +268,17 @@ func (r *RTTMonitor) shutdown() {
 
 // Flush will write any current metadata to the writer
 func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 	if r.pcapHandle != nil {
 		stats, _ := r.pcapHandle.Stats()
 		r.pcapStats = stats
 	}
-	r.metadata.PcapStats = r.pcapStats
-	r.metadata.Protocol = "icmp"
-	if r.hopLimited {
-		r.metadata.Probetype = "hoplimited"
-	} else {
-		r.metadata.Probetype = "ping"
-	}
-	r.metadata.TotalEmitted = r.totalProbesSent
-	r.metadata.TotalReceived = r.totalProbesRecv
-	r.metadata.Dest = r.ipDest
-	r.metadata.MaxTTL = r.maxTTL
-	r.metadata.ProbeAllHops = r.allHops
 
-	sort.Sort(r.metadata)
-	r.Data = r.metadata
+	sort.Sort(r)
 	err := r.baseFlush(encoder)
+	r.Probes = nil
 
-	md := &RTTMetadata{}
-	r.metadata = md
 	return err
 }
 
@@ -370,8 +357,8 @@ func (r *RTTMonitor) updateIncomingProbe(icmpid int, icmpseq int, ts time.Time, 
 	if r.verbose {
 		log.Printf("Probe %d rtt %v\n", icmpseq, proberec.WireRecv.Sub(proberec.WireSend))
 	}
-	r.metadata.Append(proberec)
-	r.totalProbesRecv++
+	r.Append(proberec)
+	r.TotalReceived++
 }
 
 func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4) {
@@ -419,7 +406,7 @@ func (r *RTTMonitor) sweepProbes(all bool) {
 	for _, seqmap := range r.probeMap {
 		for seq, prec := range seqmap {
 			if all || prec.SendTime.Sub(now) >= 10*time.Second {
-				r.metadata.Append(prec)
+				r.Append(prec)
 				delete(seqmap, seq)
 			}
 		}
@@ -483,10 +470,10 @@ func (r *RTTMonitor) sendProbe() {
 		} else {
 			r.sendv6Probe(ident, ttl, payloadVal)
 		}
-		r.totalProbesSent++
+		r.TotalEmitted++
 
 		var probe = &probe{
-			Dest:     r.ipDestIP.IP,
+			Dest:     r.destIPAddr.IP,
 			Sequence: r.nextSequence,
 			SendTime: now,
 			OutTTL:   ttl,
@@ -519,7 +506,7 @@ func (r *RTTMonitor) sendv4Probe(ident, ttl, payload int) {
 		log.Fatal(err)
 	}
 
-	if _, err := r.v4PktConn.WriteTo(wb, nil, r.ipDestIP); err != nil {
+	if _, err := r.v4PktConn.WriteTo(wb, nil, r.destIPAddr); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -544,7 +531,7 @@ func (r *RTTMonitor) sendv6Probe(ident, ttl, payload int) {
 		log.Fatal(err)
 	}
 
-	if _, err := r.v6PktConn.WriteTo(wb, nil, r.ipDestIP); err != nil {
+	if _, err := r.v6PktConn.WriteTo(wb, nil, r.destIPAddr); err != nil {
 		log.Fatal(err)
 	}
 }

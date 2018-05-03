@@ -26,7 +26,7 @@ func NewCPUMonitor() MetadataGenerator {
 // CPUMonitor collects cpu usage metadata
 type CPUMonitor struct {
 	Monitor
-	metadata []CPUMetadata
+	Data []CPUMetadata `json:"data"`
 }
 
 // Init initializes a CPUMonitor
@@ -71,7 +71,7 @@ func (c *CPUMonitor) Run() error {
 					cpuidle[fmt.Sprintf("cpu%d_idle", i)] = 100.0 - pval
 				}
 				c.mutex.Lock()
-				c.metadata = append(c.metadata, CPUMetadata{t, cpuidle})
+				c.Data = append(c.Data, CPUMetadata{t, cpuidle})
 				c.mutex.Unlock()
 			}
 		}
@@ -80,8 +80,9 @@ func (c *CPUMonitor) Run() error {
 
 // Flush will write any current metadata to the writer
 func (c *CPUMonitor) Flush(encoder *json.Encoder) error {
-	c.Data = c.metadata
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 	err := c.baseFlush(encoder)
-	c.metadata = nil
+	c.Data = nil
 	return err
 }

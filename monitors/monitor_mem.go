@@ -26,7 +26,7 @@ func NewMemoryMonitor() MetadataGenerator {
 // MemoryMonitor collects memory usage metadata
 type MemoryMonitor struct {
 	Monitor
-	metadata []MemoryMetadata
+	Data []MemoryMetadata `json:"data"`
 }
 
 // Init initialize a MemoryMonitor
@@ -65,7 +65,7 @@ func (m *MemoryMonitor) Run() error {
 				log.Printf("%s: %v\n", m.Name, err)
 			} else {
 				m.mutex.Lock()
-				m.metadata = append(m.metadata, MemoryMetadata{t, memval.UsedPercent})
+				m.Data = append(m.Data, MemoryMetadata{t, memval.UsedPercent})
 				m.mutex.Unlock()
 			}
 		}
@@ -74,8 +74,9 @@ func (m *MemoryMonitor) Run() error {
 
 // Flush will write any current metadata to the writer
 func (m *MemoryMonitor) Flush(encoder *json.Encoder) error {
-	m.Data = m.metadata
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	err := m.baseFlush(encoder)
-	m.metadata = nil
+	m.Data = nil
 	return err
 }
