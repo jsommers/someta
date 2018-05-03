@@ -76,7 +76,7 @@ func (m *MemoryMonitor) Run() error {
 func (m *MemoryMonitor) Flush(encoder *json.Encoder) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	err := m.baseFlush(encoder)
+	err := encoder.Encode(m)
 	m.Data = nil
 	return err
 }

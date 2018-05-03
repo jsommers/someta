@@ -115,7 +115,7 @@ func (n *NetstatMonitor) Run() error {
 func (n *NetstatMonitor) Flush(encoder *json.Encoder) error {
 	n.mutex.Lock()
 	defer n.mutex.Unlock()
-	err := n.baseFlush(encoder)
+	err := encoder.Encode(n)
 	n.Data = nil
 	return err
 }

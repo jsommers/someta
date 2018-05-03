@@ -276,9 +276,8 @@ func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
 	}
 
 	sort.Sort(r)
-	err := r.baseFlush(encoder)
+	err := encoder.Encode(r)
 	r.Probes = nil
-
 	return err
 }
 

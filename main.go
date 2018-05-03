@@ -25,7 +25,7 @@ const sometaVersion = "2018.04"
 var verboseOutput = false
 var quietOutput = false
 var logfileOutput = false
-var monitorRegex = regexp.MustCompile(`^([a-z]+)(,.+)*`)
+var monitorRegex = regexp.MustCompile(`^([a-z]+)([:,].+)*$`)
 var debugOutput = false
 
 type monitorConfig struct {
@@ -38,29 +38,35 @@ func (m *monitorConfig) String() string {
 
 func (m *monitorConfig) Set(val string) error {
 	configvals := monitorRegex.FindStringSubmatch(val)
+	fmt.Println(configvals)
 	if configvals == nil || len(configvals) <= 1 {
-		return fmt.Errorf("no monitor name match with %s; expected monname or monname:cfg", val)
+		return fmt.Errorf("no monitor name match with %s; expected monname or monname,key1=val1,key2=val2", val)
 	}
 	if !someta.IsValidMonitor(configvals[1]) {
 		return fmt.Errorf("%s is not a valid monitor name", configvals[0])
 	}
-
 	var name = configvals[1]
+
 	var mc = make(map[string]string)
-	for _, kvstr := range strings.Split(strings.Trim(configvals[2], " "), ",") {
-		kvitem := strings.Split(kvstr, "=")
-		if len(kvitem) < 1 || len(kvitem) > 2 {
-			log.Fatalf("Configuration key/val %s for %s formed incorrectly\n", kvstr, name)
+	if len(configvals) == 3 && len(configvals[2]) > 0 {
+		var separator = configvals[2][:1]
+		var cfgstr = configvals[2][1:]
+
+		for _, kvstr := range strings.Split(strings.Trim(cfgstr, " "), separator) {
+			kvitem := strings.Split(kvstr, "=")
+			if len(kvitem) < 1 || len(kvitem) > 2 {
+				log.Fatalf("Configuration key/val %s for %s formed incorrectly\n", kvstr, name)
+			}
+			key := strings.Trim(kvitem[0], " ")
+			if len(key) == 0 {
+				continue
+			}
+			val = ""
+			if len(kvitem) == 2 {
+				val = kvitem[1]
+			}
+			mc[kvitem[0]] = val
 		}
-		key := strings.Trim(kvitem[0], " ")
-		if len(key) == 0 {
-			continue
-		}
-		val = ""
-		if len(kvitem) == 2 {
-			val = kvitem[1]
-		}
-		mc[kvitem[0]] = val
 	}
 	m.cfg[name] = append(m.cfg[name], mc)
 	return nil
@@ -209,11 +215,11 @@ func (s *SystemMetadata) rolloverMetadata() {
 			log.Fatal(err)
 		}
 		s.encoder = json.NewEncoder(s.metadataOutput)
+		s.encoder.Encode(s) // put system metadata at the head of metadata file, but only if file output
 	} else {
 		s.encoder = json.NewEncoder(os.Stdout)
 		s.encoder.SetIndent("", "  ")
 	}
-	s.encoder.Encode(s) // put system metadata at the head of metadata file
 }
 
 func main() {

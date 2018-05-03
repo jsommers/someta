@@ -107,7 +107,7 @@ func (i *IOMonitor) Run() error {
 func (i *IOMonitor) Flush(encoder *json.Encoder) error {
 	i.mutex.Lock()
 	defer i.mutex.Unlock()
-	err := i.baseFlush(encoder)
+	err := encoder.Encode(i)
 	i.Data = nil
 	return err
 }

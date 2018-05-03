@@ -40,15 +40,6 @@ func (m *Monitor) baseInit(name string, verbose bool, defaultInterval time.Durat
 	m.interval = defaultInterval
 }
 
-func (m *Monitor) baseFlush(encoder *json.Encoder) error {
-	// assumes that m.mutex is held!
-	err := encoder.Encode(m)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
 var monitorRegistry map[string](func() MetadataGenerator)
 
 // InitRegistry initializes the monitor registry; must be called by someta main

@@ -82,7 +82,7 @@ func (c *CPUMonitor) Run() error {
 func (c *CPUMonitor) Flush(encoder *json.Encoder) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
-	err := c.baseFlush(encoder)
+	err := encoder.Encode(c)
 	c.Data = nil
 	return err
 }
