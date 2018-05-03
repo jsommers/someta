@@ -3,27 +3,32 @@ SoMeta
 
 Automatic collection of network measurement metadata.
 
-This is a complete rewrite of SoMeta in golang.  
+This is a complete rewrite of SoMeta in go.  
 
-The command line will basically be like that with the Python version (only faster, right?)
+
+
 
 Changes
 -------
 
 Changes from the earlier Python version of SoMeta:
+
  * Because of Go's command-argument handling, flags to someta cannot be written like `-Mcpu`, but must rather be written as `-M=cpu` or `-M cpu`.
  * CPU affinity is not yet implemented
  * Metadata structure is changed to permit a less tightly-coupled architecture between the someta main and monitors
-   * Analysis and plotting tools are not yet revised to account for these changes
+   * The plotting tool hasn't been updated yet to handle these changes, though
+     the basic analysis tool has been updated.
  * There's even more rich data collected about the system when someta starts up
- * RTT monitor isn't finished yet
- * I'm sure there are other changes I'm forgetting :-(
 
 Examples
 --------
 
-Needs to be updated
 
+Here's an example with turning on all monitors (io, netstat, cpu, mem, rtt):
+
+    sudo ./someta -M=io,disk0 -M=netstat,en0 -M=cpu -M=me -M=rtt,type=hoplimited,dest=149.43.80.25,maxttl=3,interface=en0 -R 1m -F 20s -f fulltest -l -m 1s -w 2s -v -c "sleep 150"
+
+Type `./someta -h` for a list of command line options and their defaults.
 
 License
 -------
