@@ -74,6 +74,12 @@ func IsValidMonitor(name string) bool {
 	return ok
 }
 
+var intfNames = &interfaceNames{}
+
+func init() {
+	intfNames.buildIntfNameMap()
+}
+
 // code adapted from Python standard library Lib/random.py
 func _gammavariate(alpha, beta float64) float64 {
 	if alpha <= 0.0 || beta <= 0.0 {

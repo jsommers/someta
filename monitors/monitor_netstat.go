@@ -35,15 +35,6 @@ type NetstatMonitor struct {
 // Init initializes a NetstatMonitor
 func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	n.baseInit(name, verbose, defaultInterval)
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		log.Fatal(err)
-	}
-	var allintf []string
-	for _, netdev := range ifaces {
-		allintf = append(allintf, netdev.Name)
-	}
-	sort.Strings(allintf)
 
 	intstr, ok := config["interval"]
 	if ok {
@@ -56,20 +47,15 @@ func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Du
 	}
 
 	for devname := range config {
-		idx := sort.SearchStrings(allintf, devname)
-		if idx == len(allintf) || allintf[idx] != devname {
-			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(allintf, ","))
+		if !intfNames.isValid(devname) {
+			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(intfNames.all(), ","))
 		}
 		n.ifacesMonitored = append(n.ifacesMonitored, devname)
 	}
 	// no device names specified; monitor all devices
 	if len(config) == 0 {
-		for _, intf := range ifaces {
-			n.ifacesMonitored = append(n.ifacesMonitored, intf.Name)
-
-		}
+		n.ifacesMonitored = intfNames.all()
 	}
-	sort.Strings(n.ifacesMonitored)
 	if n.verbose {
 		plural := ""
 		if len(n.ifacesMonitored) > 1 {

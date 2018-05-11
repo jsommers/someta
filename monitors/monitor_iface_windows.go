@@ -5,8 +5,13 @@ package someta
 import (
 	"bytes"
 	"encoding/csv"
+        // "fmt"
+        "github.com/google/gopacket/pcap"
+	"io"
 	"log"
 	"os/exec"
+	"sort"
+        "strings"
 )
 
 /*
@@ -22,18 +27,22 @@ import (
 
 type interfaceNames struct {
 	names map[string]string
+        pcapDevs []string
 }
 
-func (i interfaceNames) isValid(name string) {
+func (i *interfaceNames) isValid(name string) bool {
 	_, ok := i.names[name]
 	return ok
 }
 
-func (i interfaceNames) pcapName(name string) {
-	return i.names[name]
+func (i *interfaceNames) pcapName(name string) string {
+        // need to translate "\Tcpip_" -> "\NPF_"
+        // fmt.Println("pcapdevs", i.pcapDevs)
+
+	return strings.Replace(i.names[name], "Tcpip_", "NPF_", 1)
 }
 
-func (i interfaceNames) buildIntfNameMap() {
+func (i *interfaceNames) buildIntfNameMap() {
 	cmd := exec.Command("getmac", "/fo", "csv", "/nh", "/v")
 	var out bytes.Buffer
 	cmd.Stdout = &out
@@ -57,9 +66,17 @@ func (i interfaceNames) buildIntfNameMap() {
 		}
 		i.names[fields[0]] = fields[3]
 	}
+
+        pcaps, err := pcap.FindAllDevs()
+        if err != nil {
+            log.Fatal(err)
+        }
+        for _, p := range pcaps {
+            i.pcapDevs = append(i.pcapDevs, p.Name)
+        }
 }
 
-func (i interfaceNames) all() []string {
+func (i *interfaceNames) all() []string {
 	var names []string
 	for n := range i.names {
 		names = append(names, n)

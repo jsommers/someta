@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -134,7 +135,10 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	if !ok {
 		log.Fatalf(`%s monitor: need "interface" in RTT monitor configuration`, name)
 	}
-	r.netDev = val
+	if !intfNames.isValid(val) {
+		log.Fatalf(`%s monitor: invalid "interface" name %s; valid names: %s`, name, val, strings.Join(intfNames.all(), ","))
+	}
+	r.netDev = intfNames.pcapName(val)
 	delete(config, "interface")
 
 	r.MaxTTL = 64

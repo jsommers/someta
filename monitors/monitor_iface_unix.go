@@ -22,16 +22,16 @@ type interfaceNames struct {
 	names map[string]string
 }
 
-func (i interfaceNames) isValid(name string) bool {
+func (i *interfaceNames) isValid(name string) bool {
 	_, ok := i.names[name]
 	return ok
 }
 
-func (i interfaceNames) pcapName(name string) string {
+func (i *interfaceNames) pcapName(name string) string {
 	return i.names[name]
 }
 
-func (i interfaceNames) buildIntfNameMap() {
+func (i *interfaceNames) buildIntfNameMap() {
 	i.names = make(map[string]string)
 	intfs, err := net.Interfaces()
 	if err != nil {
@@ -42,7 +42,7 @@ func (i interfaceNames) buildIntfNameMap() {
 	}
 }
 
-func (i interfaceNames) all() []string {
+func (i *interfaceNames) all() []string {
 	var names []string
 	for n := range i.names {
 		names = append(names, n)
