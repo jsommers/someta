@@ -20,9 +20,9 @@ this should install a binary `someta` in $GOPATH/bin
 Running
 -------
 
-**describe the command-line options**
+**FIXME**: describe the command-line options; discuss differences with Python version
 
-discuss differences with Python version
+Note: below needs updating for Go rewrite; this is a copy of material from the older Python version of the code.
 
 
 ``metameasurement.py`` Python program.  There are several
