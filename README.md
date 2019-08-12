@@ -135,10 +135,18 @@ Changes from the earlier Python version of SoMeta:
  * There's even more rich data collected about the system when someta starts up
 
 
+Credits
+-------
+
+I gratefully acknowledge support from the National Science Foundation.  The materials here are based upon work supported by the NSF under grant 1814537 ("NeTS: Small: RUI: Automating Active Measurement Metadata Collection and Analysis").
+
+Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author and do not necessarily reflect the views of the National Science Foundation.
+
+
 License
 -------
 
-Copyright 2018  SoMeta authors.  All rights reserved.
+Copyright 2018-19  SoMeta authors.  All rights reserved.
 
 The SoMeta software is distributed under terms of the GNU General Public License, version 3.  See below for the standard GNU GPL v3 copying text.
 
