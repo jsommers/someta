@@ -3,31 +3,50 @@ SoMeta
 
 Automatic collection of network measurement metadata.
 
-This is a complete rewrite of SoMeta in go.  
+This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
 
-Installation
-------------
+Building
+--------
 
-**FIXME**
+The source tree needs to be downloaded to GOPATH/src/github.com/jsommers.
 
-go install -i github.com/jsommers/someta
+You can do this with: `go get github.com/jsommers/someta`.  The development library and headers for `libpcap` will need to be installed for this to successfully complete.  On Debian-variant Linux systems, you can just do `apt install libpcap-dev`.
 
-(name the dependencies: gopacket, psutil, x/net x/unix)
+You can then `cd` to `$GOPATH/src/github.com/jsommers/someta` and type `go build`.  A binary named `someta` will be produced.
 
-this should install a binary `someta` in $GOPATH/bin
 
 Running
 -------
 
-**FIXME**: describe the command-line options; discuss differences with Python version
-
-Note: below needs updating for Go rewrite; this is a copy of material from the older Python version of the code.
+There are several possible command-line options.  See below for a listing of all parameters (i.e., the output of `someta -a`.  Some additional detail is below, specifically regarding monitors and options.
 
 
-``metameasurement.py`` Python program.  There are several
-possible command-line options.  See ``metameasurement.py -h`` for a list.  Some
-additional detail is below, specifically regarding monitors and options.
+`
+Usage of ./someta:
+  -C int
+    	Set CPU affinity (default is not to set affinity) (default -1)
+  -F duration
+    	Time period after which in-memory metadata will be flushed to file (default 10m0s)
+  -M value
+    	Select monitors to include. Default=None. Valid monitors=cpu,io,mem,netstat,rtt
+  -R duration
+    	Time period after which metadata output will rollover to a new file (default 1h0m0s)
+  -c string
+    	Command line for external measurement program
+  -d	Debug output (metadata is written to stdout)
+  -f string
+    	Output file basename; current date/time is included as part of the filename (default "metadata")
+  -l	Send logging messages to a file (by default, they go to stdout)
+  -m duration
+    	Time interval on which to gather metadata from monitors (default 1s)
+  -q	Quiet output
+  -u duration
+    	Time interval on which to show periodic status while running (default 5s)
+  -v	Verbose output
+  -w duration
+    	Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected (default 1s)
+`
 
 The ``-c`` option indicates the "external" measurement tool to start.  By default, 
 SoMeta starts ``sleep 5``, which causes SoMeta simply to collect 5 seconds-worth of
@@ -39,14 +58,11 @@ The ``-M`` option specifies a monitor to start.  Standard available sources incl
 
 To configure a monitor, parameters may be specified along with each monitor name, each separated by a colon (':').  Each parameter may be a single string, or a ``key=value`` pair.  The order of parameters doesn't matter.
 
-
-
 Here's an example with turning on all monitors (io, netstat, cpu, mem, rtt):
 
     sudo ./someta -M=io,disk0 -M=netstat,en0 -M=cpu -M=me -M=rtt,type=hoplimited,dest=149.43.80.25,maxttl=3,interface=en0 -R 1m -F 20s -f fulltest -l -m 1s -w 2s -v -c "sleep 150"
 
-Type `./someta -h` for a list of command line options and their defaults.
-
+Again, type `./someta -h` for a list of command line options and their defaults.
 
 Valid parameters for each standard monitor are:
 
@@ -81,29 +97,31 @@ Valid parameters for each standard monitor are:
      ``constflow``: manipulate packet contents to force first 4 bytes of transport header to be constant (to make probes follow a constant path).  This parameter only has an affect on icmp; data are appended to force the checksum to be a constant value.  Note: udp/tcp probes always have const first 4 bytes.
 
 
-Here are some examples::
+Here are some examples:
 
     # Monitor only CPU performance while emitting 100 ICMP echo request (ping) probes to
     # www.google.com.
-    $ python3 metameasurement.py -Mcpu -c "ping -c 100 www.google.com" 
+    $ sudo ./someta -Mcpu -c "ping -c 100 www.google.com" 
 
     # Monitor CPU performance and netstat counters (for all interfaces) for traceroute
-    $ python3 metameasurement.py -Mcpu -Mnetstat -c "traceroute www.google.com" 
+    $ sudo ./someta -Mcpu -Mnetstat -c "traceroute www.google.com" 
 
     # Monitor CPU, IO and Netstat counters for ping
     # Set the metadata output file to start with "ping_google"
-    $ python3 metameasurement.py -Mio -Mnetstat -c "ping www.google.com" -f ping_google
+    $ sudo ./someta -Mio -Mnetstat -c "ping www.google.com" -f ping_google
 
     # Monitor everything, including RTT for the first 3 hops of the network path toward
     # 8.8.8.8.  As the external tool, use scamper to emit ICMP echo requests, dumping
     # its output to a warts file.
-    $ python3 metameasurement.py -Mcpu -Mmem -Mio -Mnetstat:eth0 -Mrtt:interface=eth0:type=hoplimited:maxttl=3:dest=8.8.8.8 -f ping_metadata -l -c "scamper -c \"ping -P icmp-echo -c 60 -s 64\" -o ping.warts -O warts -i 8.8.8.8"
+    $ sudo ./someta -Mcpu -Mmem -Mio -Mnetstat:eth0 -Mrtt:interface=eth0:type=hoplimited:maxttl=3:dest=8.8.8.8 -f ping_metadata -l -c "scamper -c \"ping -P icmp-echo -c 60 -s 64\" -o ping.warts -O warts -i 8.8.8.8"
 
 
 Analyzing metadata
 ------------------
 
 The ``analyzemeta.py`` script performs some simple analysis on SoMeta metadata, printing results to the console.  
+
+Analysis and plotting tools need some updating still from the earlier Python versions.
 
 Plotting metadata
 -----------------
@@ -149,7 +167,6 @@ License
 Copyright 2018-19  SoMeta authors.  All rights reserved.
 
 The SoMeta software is distributed under terms of the GNU General Public License, version 3.  See below for the standard GNU GPL v3 copying text.
-
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
