@@ -23,6 +23,7 @@ There are several possible command-line options.  See below for a listing of all
 
 
 Usage of ./someta:
+
       -C int
         	Set CPU affinity (default is not to set affinity) (default -1)
       -F duration
