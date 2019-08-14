@@ -22,31 +22,30 @@ Running
 There are several possible command-line options.  See below for a listing of all parameters (i.e., the output of `someta -a`.  Some additional detail is below, specifically regarding monitors and options.
 
 
-`
 Usage of ./someta:
-  -C int
-    	Set CPU affinity (default is not to set affinity) (default -1)
-  -F duration
-    	Time period after which in-memory metadata will be flushed to file (default 10m0s)
-  -M value
-    	Select monitors to include. Default=None. Valid monitors=cpu,io,mem,netstat,rtt
-  -R duration
-    	Time period after which metadata output will rollover to a new file (default 1h0m0s)
-  -c string
-    	Command line for external measurement program
-  -d	Debug output (metadata is written to stdout)
-  -f string
-    	Output file basename; current date/time is included as part of the filename (default "metadata")
-  -l	Send logging messages to a file (by default, they go to stdout)
-  -m duration
-    	Time interval on which to gather metadata from monitors (default 1s)
-  -q	Quiet output
-  -u duration
-    	Time interval on which to show periodic status while running (default 5s)
-  -v	Verbose output
-  -w duration
-    	Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected (default 1s)
-`
+      -C int
+        	Set CPU affinity (default is not to set affinity) (default -1)
+      -F duration
+         	Time period after which in-memory metadata will be flushed to file (default 10m0s)
+      -M value
+        	Select monitors to include. Default=None. Valid monitors=cpu,io,mem,netstat,rtt
+      -R duration
+        	Time period after which metadata output will rollover to a new file (default 1h0m0s)
+      -c string
+        	Command line for external measurement program
+      -d	Debug output (metadata is written to stdout)
+      -f string
+        	Output file basename; current date/time is included as part of the filename (default "metadata")
+      -l	Send logging messages to a file (by default, they go to stdout)
+      -m duration
+        	Time interval on which to gather metadata from monitors (default 1s)
+      -q	Quiet output
+      -u duration
+        	Time interval on which to show periodic status while running (default 5s)
+      -v	Verbose output
+      -w duration
+        	Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected (default 1s)
+
 
 The ``-c`` option indicates the "external" measurement tool to start.  By default, 
 SoMeta starts ``sleep 5``, which causes SoMeta simply to collect 5 seconds-worth of
