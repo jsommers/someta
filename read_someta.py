@@ -49,6 +49,14 @@ def _read_rtt(lineinfo):
     return df
 
 def read_someta(filename):
+    '''
+    read_someta(filename) -> dict of pandas.DataFrame objects
+
+    This function takes a filename as a parameter, which should be a
+    .json file with SoMeta-produced metadata.  It returns a dict of 
+    pandas DataFrame objects, one for each monitor for which metadata
+    are available.
+    '''
     dfdict = {}
     with open(filename) as infile:
         for line in infile:

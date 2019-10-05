@@ -122,10 +122,43 @@ Analyzing metadata
 
 The ``analyzemeta.py`` script performs some simple analysis on SoMeta metadata, printing results to the console.  
 
+
+Reading into a Pandas DataFrame 
+-------------------------------
+
+For more complex data analyses (or, if you prefer, metadata analyses), there is a Python module `read_someta.py` that provides a function `read_someta` for reading data in a SoMeta `.json` file into a dictionary of Pandas DataFrame objects.  There will be a different DataFrame object associated with each monitor.
+
+For example:
+
+```
+>>> from read_someta import read_someta
+>>> d = read_someta('fulltest_2018-05-03T18:07:11-04:00.json')
+>>> d.keys()
+dict_keys(['someta', 'cpu', 'mem', 'rtt', 'io', 'netstat'])
+>>> d['cpu']
+                                     cpu0_idle  cpu1_idle  cpu2_idle  cpu3_idle
+timestamp
+2018-05-03 18:07:12.978601317-04:00  62.037037  87.735849  68.224299  89.719626
+2018-05-03 18:07:13.979181597-04:00  70.000000  93.069307  71.000000  96.000000
+2018-05-03 18:07:14.980990941-04:00  82.828283  97.979798  86.000000  98.000000
+2018-05-03 18:07:15.980368940-04:00  74.000000  96.039604  79.000000  96.000000
+2018-05-03 18:07:16.981288271-04:00  69.306931  89.000000  75.000000  91.089109
+...                                        ...        ...        ...        ...
+2018-05-03 18:08:08.981608769-04:00  80.808081  94.000000  83.838384  90.000000
+2018-05-03 18:08:09.983457489-04:00  83.000000  94.000000  86.274510  89.000000
+2018-05-03 18:08:10.981178466-04:00  87.000000  97.000000  93.000000  98.000000
+2018-05-03 18:08:11.983964314-04:00  70.297030  92.079208  72.000000  91.000000
+2018-05-03 18:08:12.981282530-04:00  90.909091  98.000000  95.959596  99.000000
+
+[61 rows x 4 columns]
+>>>
+```
+
+
 Plotting metadata
 -----------------
 
-NB: plotting tools need some updating still from the earlier Python versions.  The analysis script `analyzemeta.py` is updated and does simple analyses on all metadata found in the file produced by the tool.
+NB: plotting tools need some updating still from the earlier Python versions.  
 
 The ``plotmeta.py`` tool is designed to help plot various metrics collected through SoMeta *monitors*.  To see what metrics may be plotted, you can run the following::
 
