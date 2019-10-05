@@ -5,6 +5,7 @@ Automatic collection of network measurement metadata.
 
 This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
+Current version is 1.1.0.  
 
 Building
 --------
@@ -121,10 +122,10 @@ Analyzing metadata
 
 The ``analyzemeta.py`` script performs some simple analysis on SoMeta metadata, printing results to the console.  
 
-Analysis and plotting tools need some updating still from the earlier Python versions.
-
 Plotting metadata
 -----------------
+
+NB: plotting tools need some updating still from the earlier Python versions.  The analysis script `analyzemeta.py` is updated and does simple analyses on all metadata found in the file produced by the tool.
 
 The ``plotmeta.py`` tool is designed to help plot various metrics collected through SoMeta *monitors*.  To see what metrics may be plotted, you can run the following::
 
