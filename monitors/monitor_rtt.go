@@ -437,7 +437,8 @@ func (r *RTTMonitor) Run() error {
 	go r.probeSweeper()
 	defer r.shutdown()
 
-	timer := time.NewTimer(gammaInterval(r.interval))
+	// timer := time.NewTimer(gammaInterval(r.interval))
+	timer := time.NewTicker(r.interval)
 	now := time.Now()
 	for {
 		select {
@@ -447,7 +448,7 @@ func (r *RTTMonitor) Run() error {
 			}
 			now = time.Now()
 			r.sendProbe()
-			timer.Reset(gammaInterval(r.interval))
+			// timer.Reset(gammaInterval(r.interval))
 
 		case <-r.stop:
 			timer.Stop()
