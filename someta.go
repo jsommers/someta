@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-const sometaVersion = "1.0.0"
+const sometaVersion = "1.1.0"
 
 var verboseOutput = false
 var quietOutput = false
