@@ -1,6 +1,6 @@
 module github.com/jsommers/someta/monitors
 
-go 1.12
+go 1.13
 
 require (
 	github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d // indirect
