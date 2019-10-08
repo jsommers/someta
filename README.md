@@ -57,7 +57,9 @@ if there are embedded quotes needed for the tool (see the example with scamper, 
 
 The ``-M`` option specifies a monitor to start.  Standard available sources include cpu, mem, io, netstat, rtt (see the ``monitors/`` directory).
 
-To configure a monitor, parameters may be specified along with each monitor name, each separated by a colon (':').  Each parameter may be a single string, or a ``key=value`` pair.  The order of parameters doesn't matter.
+To configure a monitor, parameters may be specified along with each monitor name, each separated by a colon (`:`) or a comma (`,`).  Each parameter may be a single string, or a ``key=value`` pair.  The order of parameters doesn't matter.
+
+Note that if you are using the rtt monitor with IPv6, you'll need to use comma separators because the colon key-value separator can't be distinguished from the colon separator within an IPv6 address.
 
 Here's an example with turning on all monitors (io, netstat, cpu, mem, rtt):
 
@@ -115,6 +117,10 @@ Here are some examples:
     # 8.8.8.8.  As the external tool, use scamper to emit ICMP echo requests, dumping
     # its output to a warts file.
     $ sudo ./someta -Mcpu -Mmem -Mio -Mnetstat:eth0 -Mrtt:interface=eth0:type=hoplimited:maxttl=3:dest=8.8.8.8 -f ping_metadata -l -c "scamper -c \"ping -P icmp-echo -c 60 -s 64\" -o ping.warts -O warts -i 8.8.8.8"
+
+    # An example with using the RTT monitor w/IPv6 (with the dummy command `sleep`).
+    # Note that in my example below I used an IPv6 (6-in-4) tunnel interface.
+    $ sudo ./someta -c "sleep 5" -M rtt,dest="2607:f8b0:4006:805::200e",type=hoplimited,interface=he-ipv6,maxttl=6  -v
 
 
 Analyzing metadata
