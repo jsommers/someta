@@ -128,7 +128,6 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 		r.useV4 = true
 	} else {
 		r.useV4 = false
-		log.Fatalf("%s monitor: IPv6 probing is not implemented yet", name)
 	}
 
 	val, ok = config["interface"]
@@ -306,16 +305,16 @@ func (r *RTTMonitor) pcapReader() {
 		if ip4 != nil && icmp4 != nil {
 			iphdr, _ := ip4.(*layers.IPv4)
 			icmphdr, _ := icmp4.(*layers.ICMPv4)
-			r.handleV4(ts, iphdr, icmphdr)
+			r.handleV4(ts, iphdr, icmphdr, packet)
 			continue
 		}
 
-		ip6 := packet.Layer(layers.LayerTypeIPv4)
+		ip6 := packet.Layer(layers.LayerTypeIPv6)
 		icmp6 := packet.Layer(layers.LayerTypeICMPv6)
 		if ip6 != nil && icmp6 != nil {
 			iphdr, _ := ip6.(*layers.IPv6)
 			icmphdr, _ := icmp6.(*layers.ICMPv6)
-			r.handleV6(ts, iphdr, icmphdr)
+			r.handleV6(ts, iphdr, icmphdr, packet)
 		}
 	}
 }
@@ -364,7 +363,7 @@ func (r *RTTMonitor) updateIncomingProbe(icmpid int, icmpseq int, ts time.Time, 
 	r.TotalReceived++
 }
 
-func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4) {
+func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4, packet pkt.Packet) {
 	if !(r.isMyIPAddr(ip.SrcIP) || r.isMyIPAddr(ip.DstIP)) {
 		return
 	}
@@ -396,8 +395,47 @@ func (r *RTTMonitor) handleV4(ts time.Time, ip *layers.IPv4, icmp *layers.ICMPv4
 	}
 }
 
-func (r *RTTMonitor) handleV6(ts time.Time, ip *layers.IPv6, icmp *layers.ICMPv6) {
-	log.Println("v6 packet receive isn't handled yet", ts, ip, icmp)
+func (r *RTTMonitor) handleV6(ts time.Time, ip *layers.IPv6, icmp *layers.ICMPv6, packet pkt.Packet) {
+	if !(r.isMyIPAddr(ip.SrcIP) || r.isMyIPAddr(ip.DstIP)) {
+		return
+	}
+	var icmpid int
+	var icmpseq int
+
+	v6echo := packet.Layer(layers.LayerTypeICMPv6Echo)
+	echo, _ := v6echo.(*layers.ICMPv6Echo)
+	if echo != nil {
+		icmpid = int(echo.Identifier)
+		icmpseq = int(echo.SeqNumber)
+	}
+
+	icmptype := icmp.TypeCode.Type()
+	icmpcode := icmp.TypeCode.Code()
+	if icmptype == layers.ICMPv6TypeEchoRequest {
+		if r.isMyICMPId(icmpid) {
+			r.updateOutgoingProbe(icmpid, icmpseq, ts, ip.SrcIP)
+		}
+	} else if icmptype == layers.ICMPv6TypeEchoReply {
+		if r.isMyICMPId(icmpid) {
+			r.updateIncomingProbe(icmpid, icmpseq, ts, int(ip.HopLimit), ip.SrcIP)
+		}
+	} else if icmptype == layers.ICMPv6TypeTimeExceeded && icmpcode == layers.ICMPv6CodeHopLimitExceeded {
+		var nestedv6 layers.IPv6
+		var nestedicmpv6 layers.ICMPv6
+		var nestedecho layers.ICMPv6Echo
+		parser := pkt.NewDecodingLayerParser(layers.LayerTypeIPv6, &nestedv6, &nestedicmpv6, &nestedecho)
+		decoded := make([]pkt.LayerType, 3, 3)
+		payload := icmp.LayerPayload()
+		if err := parser.DecodeLayers(payload[4:], &decoded); err == nil {
+			if nestedv6.NextHeader == layers.IPProtocolICMPv6 && nestedicmpv6.TypeCode.Type() == layers.ICMPv6TypeEchoRequest {
+				nestedID := int(nestedecho.Identifier)
+				if r.isMyICMPId(nestedID) {
+					nestedSeq := int(nestedecho.SeqNumber)
+					r.updateIncomingProbe(nestedID, nestedSeq, ts, int(ip.HopLimit), ip.SrcIP)
+				}
+			}
+		}
+	}
 }
 
 func (r *RTTMonitor) sweepProbes(all bool) {
