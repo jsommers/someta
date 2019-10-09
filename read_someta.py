@@ -25,7 +25,7 @@ def _read_netstat(lineinfo):
         row = df.iloc[i]
         intfvals = pd.DataFrame.from_dict(row['netstat'], orient='columns')
         intfvals = intfvals.T
-        intfvals.index = [row.timestamp]
+        intfvals.index = [row.timestamp]*len(intfvals)
         xd = pd.concat([xd, intfvals])
     return xd
 
@@ -35,10 +35,10 @@ def _read_io(lineinfo):
     xd = pd.DataFrame()
     for i in range(len(df)):
         row = df.iloc[i]
-        intfvals = pd.DataFrame.from_dict(row['counters'], orient='columns')
-        intfvals = intfvals.T
-        intfvals.index = [row.timestamp]
-        xd = pd.concat([xd, intfvals])
+        devicevals = pd.DataFrame.from_dict(row['counters'], orient='columns')
+        devicevals = devicevals.T
+        devicevals.index = [row.timestamp]*len(devicevals)
+        xd = pd.concat([xd, devicevals])
     return xd
 
 def _read_rtt(lineinfo):
