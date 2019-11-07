@@ -40,7 +40,7 @@ func (p *probe) String() string {
 // RTTMetadata is a slice of probe samples.  It implements sort.Interface
 type RTTMetadata struct {
 	Probes        []probe     `json:"probes"`
-	PcapStats     *pcap.Stats `json:"libpcap_stats"`
+	PcapStats     pcap.Stats `json:"libpcap_stats"`
 	Protocol      string      `json:"protocol"`
 	Probetype     string      `json:"probetype"`
 	TotalEmitted  int64       `json:"total_probes_emitted"`
@@ -86,7 +86,6 @@ type RTTMonitor struct {
 
 	nextSequence int
 
-	pcapStats  *pcap.Stats
 	pcapHandle *pcap.Handle
 	v4Listener net.PacketConn
 	v4PktConn  *ipv4.PacketConn
@@ -233,7 +232,6 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 			i++
 		}
 	}
-	r.PcapStats = r.pcapStats
 	r.Protocol = "icmp"
 	if hopLimited {
 		r.Probetype = "hoplimited"
@@ -256,7 +254,7 @@ func (r *RTTMonitor) shutdown() {
 	if err != nil {
 		log.Printf("%s monitor: error getting pcap stats: %v\n", r.Name, err)
 	} else {
-		r.pcapStats = stats
+		r.PcapStats = *stats
 	}
 	r.pcapHandle.Close()
 	r.pcapHandle = nil
@@ -275,7 +273,7 @@ func (r *RTTMonitor) Flush(encoder *json.Encoder) error {
 	defer r.mutex.Unlock()
 	if r.pcapHandle != nil {
 		stats, _ := r.pcapHandle.Stats()
-		r.pcapStats = stats
+		r.PcapStats = *stats
 	}
 
 	sort.Sort(r)
