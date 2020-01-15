@@ -104,19 +104,19 @@ Here are some examples:
 
     # Monitor only CPU performance while emitting 100 ICMP echo request (ping) probes to
     # www.google.com.
-    $ sudo ./someta -Mcpu -c "ping -c 100 www.google.com" 
+    $ sudo ./someta -M=cpu -c "ping -c 100 www.google.com" 
 
     # Monitor CPU performance and netstat counters (for all interfaces) for traceroute
-    $ sudo ./someta -Mcpu -Mnetstat -c "traceroute www.google.com" 
+    $ sudo ./someta -M=cpu -M=netstat -c "traceroute www.google.com" 
 
     # Monitor CPU, IO and Netstat counters for ping
     # Set the metadata output file to start with "ping_google"
-    $ sudo ./someta -Mio -Mnetstat -c "ping www.google.com" -f ping_google
+    $ sudo ./someta -M=io -M=netstat -c "ping www.google.com" -f ping_google
 
     # Monitor everything, including RTT for the first 3 hops of the network path toward
     # 8.8.8.8.  As the external tool, use scamper to emit ICMP echo requests, dumping
     # its output to a warts file.
-    $ sudo ./someta -Mcpu -Mmem -Mio -Mnetstat:eth0 -Mrtt:interface=eth0:type=hoplimited:maxttl=3:dest=8.8.8.8 -f ping_metadata -l -c "scamper -c \"ping -P icmp-echo -c 60 -s 64\" -o ping.warts -O warts -i 8.8.8.8"
+    $ sudo ./someta -M=cpu -M=mem -M=io -M=netstat:eth0 -M=rtt:interface=eth0:type=hoplimited:maxttl=3:dest=8.8.8.8 -f ping_metadata -l -c "scamper -c \"ping -P icmp-echo -c 60 -s 64\" -o ping.warts -O warts -i 8.8.8.8"
 
     # An example with using the RTT monitor w/IPv6 (with the dummy command `sleep`).
     # Note that in my example below I used an IPv6 (6-in-4) tunnel interface.
