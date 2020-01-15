@@ -253,8 +253,7 @@ func main() {
 	// start the main command
 	cmdOutput := make(chan string)
 	go func() {
-		cmdarr := strings.Split(commandLine, " ")
-		cmd := exec.Command(cmdarr[0], cmdarr[1:]...)
+		cmd := exec.Command("/bin/sh", "-c", commandLine)
 		var outbuf bytes.Buffer
 		cmd.Stdout = &outbuf
 		err := cmd.Run()
