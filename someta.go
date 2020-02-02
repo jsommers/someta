@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"os"
 	"os/exec"
+	"os/signal"
 	"regexp"
 	"strings"
 	"sync"
@@ -274,11 +275,19 @@ func main() {
 	fileFlushTicker := time.NewTicker(fileFlushInterval)
 	defer fileFlushTicker.Stop()
 
+	sigchan := make(chan os.Signal, 1)
+	signal.Notify(sigchan, os.Interrupt)
+
 	done := false
 	for !done {
 		select {
 		case output := <-cmdOutput:
 			md.CommandOutput = output
+			done = true
+		case s := <-sigchan:
+			log.Println("Got signal: ", s)
+			flushMonitorMetadata(md.encoder)
+			signal.Ignore()
 			done = true
 		case t := <-statusTicker.C:
 			if !quietOutput {
