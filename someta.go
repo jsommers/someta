@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -254,17 +253,20 @@ func main() {
 	// start the main command
 	cmdOutput := make(chan string)
 	go func() {
-		cmd := exec.Command("/bin/sh", "-c", commandLine)
-		var outbuf bytes.Buffer
-		cmd.Stdout = &outbuf
-		err := cmd.Run()
+		path, err := exec.LookPath("sh")
+		if err != nil {
+			log.Fatalf("sh doesn't exist to run external command: %v; ensure PATH includes sh executable\n", err)
+		}
+		cmd := exec.Command(path, "-c", commandLine)
+		stdoutStderr, err := cmd.CombinedOutput()
 		if err != nil {
 			log.Printf("Command <%s> exited with error: %v\n", commandLine, err)
 		}
 		if verboseOutput {
 			log.Printf("Command <%s> completed\n", commandLine)
+			log.Printf("Command output: %s\n", stdoutStderr)
 		}
-		cmdOutput <- outbuf.String()
+		cmdOutput <- string(stdoutStderr)
 	}()
 
 	// set up the main thread's loop
