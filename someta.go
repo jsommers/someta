@@ -259,7 +259,7 @@ func main() {
 		cmd.Stdout = &outbuf
 		err := cmd.Run()
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Command <%s> exited with error: %v\n", commandLine, err)
 		}
 		if verboseOutput {
 			log.Printf("Command <%s> completed\n", commandLine)
