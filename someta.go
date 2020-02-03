@@ -214,11 +214,14 @@ func (s *SystemMetadata) rolloverMetadata() {
 			log.Fatal(err)
 		}
 		s.encoder = json.NewEncoder(s.metadataOutput)
-		s.encoder.Encode(s) // put system metadata at the head of metadata file, but only if file output
 	} else {
 		s.encoder = json.NewEncoder(os.Stdout)
 		s.encoder.SetIndent("", "  ")
 	}
+}
+
+func (s *SystemMetadata) writeMetadata() {
+	s.encoder.Encode(s)
 }
 
 func main() {
@@ -284,6 +287,7 @@ func main() {
 	for !done {
 		select {
 		case output := <-cmdOutput:
+			log.Println("cmd output outside:", output)
 			md.CommandOutput = output
 			done = true
 		case s := <-sigchan:
@@ -312,7 +316,7 @@ func main() {
 	log.Println("Waiting for monitors to stop")
 	waiter.Wait()
 
-	// write out metadata
+	md.writeMetadata() // write out system metadata
 	flushMonitorMetadata(md.encoder)
 	if verboseOutput {
 		log.Println("done")
