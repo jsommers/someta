@@ -74,13 +74,17 @@ Valid parameters for each standard monitor are:
    * ``-M mem:interval=X``: set the periodic sampling interval (default 1 sec)
    * ``-M netstat:interval=X``: set the periodic sampling interval.
 
+     Note that the interval time value is parsed by go's `time.parseDuration`
+     (https://golang.org/pkg/time/#ParseDuration), so any value must also
+     include a unit, like `interval=1s` (1 second interval).
+
      Additional string arguments to the netstat monitor
      can specify interface names to monitor (all
      interfaces are included if none are specified).
      For example, to monitor en0's netstat counters
      every 5 seconds:
      
-     * ``-M netstat:interval=5:en0``
+     * ``-M netstat:interval=5s:en0``
 
    * ``-M rtt:interface=IfaceName:rate=R:dest=D:type=ProbeType:maxttl=MaxTTL:proto=Protocol:allhops:constflow``
      
