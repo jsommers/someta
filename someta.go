@@ -125,8 +125,8 @@ func startMonitors() {
 		if verboseOutput {
 			log.Printf("Starting monitor %s\n", mName)
 		}
+		waiter.Add(1)
 		go func() {
-			waiter.Add(1)
 			monitor.Run()
 			waiter.Done()
 		}()
