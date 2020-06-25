@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -20,13 +21,22 @@ import (
 	"time"
 )
 
-const sometaVersion = "1.1.0"
+const sometaVersion = "1.2.0"
 
 var verboseOutput = false
 var quietOutput = false
 var logfileOutput = false
 var monitorRegex = regexp.MustCompile(`^([a-z]+)([:,].+)*$`)
 var debugOutput = false
+
+func usage() {
+	fmt.Printf("Usage of %s:\n", os.Args[0])
+	flag.PrintDefaults()
+	fmt.Println("\nMonitors available:")
+	for _, name := range someta.Monitors() {
+		fmt.Printf("\t%s\n", name)
+	}
+}
 
 type monitorConfig struct {
 	cfg map[string]([]map[string]string)
@@ -86,6 +96,7 @@ var fileRolloverInterval = 1 * time.Hour
 func init() {
 	monCfg.cfg = make(map[string]([]map[string]string))
 	monitors = make(map[string]someta.MetadataGenerator)
+	flag.Usage = usage
 
 	flag.StringVar(&commandLine, "c", "", "Command line for external measurement program")
 	flag.BoolVar(&verboseOutput, "v", false, "Verbose output")
@@ -119,7 +130,7 @@ func configureMonitors() {
 	}
 }
 
-func startMonitors() {
+func startMonitors(ctx context.Context) {
 	for mName, mon := range monitors {
 		var monitor = mon
 		if verboseOutput {
@@ -127,18 +138,9 @@ func startMonitors() {
 		}
 		waiter.Add(1)
 		go func() {
-			monitor.Run()
+			monitor.Run(ctx)
 			waiter.Done()
 		}()
-	}
-}
-
-func stopMonitors() {
-	for mName, mon := range monitors {
-		if verboseOutput {
-			log.Printf("Stopping monitor %s\n", mName)
-		}
-		mon.Stop()
 	}
 }
 
@@ -249,7 +251,8 @@ func main() {
 		log.Printf("Not writing metadata to file (writing to stdout)")
 	}
 
-	startMonitors() // side effect: each monitor started in its own goroutine
+	ctx, stopMonitors := context.WithCancel(context.Background())
+	startMonitors(ctx) // side effect: each monitor started in its own goroutine
 
 	time.Sleep(warmCool)
 
@@ -312,6 +315,9 @@ func main() {
 	time.Sleep(warmCool)
 
 	// shut down monitors
+	if verboseOutput {
+		log.Println("Stopping monitors")
+	}
 	stopMonitors()
 	log.Println("Waiting for monitors to stop")
 	waiter.Wait()

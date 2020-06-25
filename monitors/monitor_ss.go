@@ -1,6 +1,9 @@
+// +build linux
+
 package someta
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,25 +15,24 @@ func init() {
 	registerMonitor("ss", NewSsMonitor)
 }
 
-// NetstatMetadata encapsulates what it says
+// SsMetadata encapsulates what it says
 type SsMetadata struct {
 	Timestamp time.Time `json:"timestamp"`
 	Ss        string    `json:"info"`
 }
 
-// NewNetstatMonitor creates and returns a new NetstatMonitor
+// NewSsMonitor creates and returns a new NetstatMonitor
 func NewSsMonitor() MetadataGenerator {
 	return new(SsMonitor)
 }
 
-// NetstatMonitor collects network interface counters metadata
+// SsMonitor collects metadata from the linux ss tool
 type SsMonitor struct {
 	Monitor
 	Data []SsMetadata `json:"data"`
-	//	ifacesMonitored []string
 }
 
-// Init initializes a NetstatMonitor
+// Init initializes an SsMonitor
 func (n *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
 	n.baseInit(name, verbose, defaultInterval)
 
@@ -45,21 +47,8 @@ func (n *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duratio
 	}
 	_, err := exec.LookPath("/bin/ss")
 	if err != nil {
-		return fmt.Errorf("%s monitor: ss command does not exist")
+		return fmt.Errorf("%s monitor: ss command does not exist", name)
 	}
-	/*
-		for devname := range config {
-			if !intfNames.isValid(devname) {
-				return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(intfNames.all(), ","))
-			}
-			n.ifacesMonitored = append(n.ifacesMonitored, devname)
-		}
-
-		// no device names specified; monitor all devices
-		if len(config) == 0 {
-			n.ifacesMonitored = intfNames.all()
-		}
-	*/
 	if n.verbose {
 		log.Printf("%s monitor: monitoring ss\n", name)
 	}
@@ -67,12 +56,12 @@ func (n *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duratio
 }
 
 // Run runs the netstat monitor; this should be invoked in a goroutine
-func (n *SsMonitor) Run() error {
+func (n *SsMonitor) Run(ctx context.Context) error {
 	ticker := time.NewTicker(n.interval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-n.stop:
+		case <-ctx.Done():
 			if n.verbose {
 				fmt.Printf("%s stopping\n", n.Name)
 			}

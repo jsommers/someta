@@ -1,6 +1,7 @@
 package someta
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"math"
@@ -12,8 +13,7 @@ import (
 // MetadataGenerator is the interface that all metadata sources must adhere to
 type MetadataGenerator interface {
 	Init(string, bool, time.Duration, map[string]string) error
-	Run() error
-	Stop()
+	Run(context.Context) error
 	Flush(*json.Encoder) error
 }
 
@@ -22,21 +22,14 @@ type Monitor struct {
 	Name string `json:"name"`
 	Type string `json:"type"`
 
-	stop     chan struct{}
 	verbose  bool
 	mutex    sync.Mutex
 	interval time.Duration
 }
 
-// Stop closes a channel to signal that the monitor should stop
-func (m *Monitor) Stop() {
-	close(m.stop)
-}
-
 func (m *Monitor) baseInit(name string, verbose bool, defaultInterval time.Duration) {
 	m.Name = name
 	m.Type = "monitor"
-	m.stop = make(chan struct{})
 	m.interval = defaultInterval
 }
 

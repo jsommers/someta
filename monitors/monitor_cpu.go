@@ -1,6 +1,7 @@
 package someta
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/shirou/gopsutil/cpu"
@@ -48,12 +49,12 @@ func (c *CPUMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 }
 
 // Run runs the cpu monitor; this should be invoked in a goroutine
-func (c *CPUMonitor) Run() error {
+func (c *CPUMonitor) Run(ctx context.Context) error {
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-c.stop:
+		case <-ctx.Done():
 			if c.verbose {
 				fmt.Printf("%s stopping\n", c.Name)
 			}

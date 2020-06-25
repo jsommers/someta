@@ -1,6 +1,7 @@
 package someta
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/shirou/gopsutil/mem"
@@ -49,12 +50,12 @@ func (m *MemoryMonitor) Init(name string, verbose bool, defaultInterval time.Dur
 }
 
 // Run runs the memory monitor; this should be invoked in a goroutine
-func (m *MemoryMonitor) Run() error {
+func (m *MemoryMonitor) Run(ctx context.Context) error {
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-m.stop:
+		case <-ctx.Done():
 			if m.verbose {
 				fmt.Printf("%s stopping\n", m.Name)
 			}

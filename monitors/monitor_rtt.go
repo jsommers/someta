@@ -1,6 +1,7 @@
 package someta
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	pkt "github.com/google/gopacket"
@@ -39,15 +40,15 @@ func (p *probe) String() string {
 
 // RTTMetadata is a slice of probe samples.  It implements sort.Interface
 type RTTMetadata struct {
-	Probes        []probe     `json:"probes"`
+	Probes        []probe    `json:"probes"`
 	PcapStats     pcap.Stats `json:"libpcap_stats"`
-	Protocol      string      `json:"protocol"`
-	Probetype     string      `json:"probetype"`
-	TotalEmitted  int64       `json:"total_probes_emitted"`
-	TotalReceived int64       `json:"total_probes_received"`
-	ProbeAllHops  bool        `json:"probe_all_hops"`
-	MaxTTL        int         `json:"maxttl"`
-	IPDest        string      `json:"dest"`
+	Protocol      string     `json:"protocol"`
+	Probetype     string     `json:"probetype"`
+	TotalEmitted  int64      `json:"total_probes_emitted"`
+	TotalReceived int64      `json:"total_probes_received"`
+	ProbeAllHops  bool       `json:"probe_all_hops"`
+	MaxTTL        int        `json:"maxttl"`
+	IPDest        string     `json:"dest"`
 }
 
 // Len returns the number of probe samples
@@ -453,7 +454,7 @@ func (r *RTTMonitor) sweepProbes(all bool) {
 	r.mutex.Unlock()
 }
 
-func (r *RTTMonitor) probeSweeper() {
+func (r *RTTMonitor) probeSweeper(ctx context.Context) {
 	// every 2 seconds, sweep through and remove "old" probes
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
@@ -461,16 +462,16 @@ func (r *RTTMonitor) probeSweeper() {
 		select {
 		case <-t.C:
 			r.sweepProbes(false)
-		case <-r.stop:
+		case <-ctx.Done():
 			return
 		}
 	}
 }
 
 // Run runs the RTT monitor; this should be invoked in a goroutine
-func (r *RTTMonitor) Run() error {
+func (r *RTTMonitor) Run(ctx context.Context) error {
 	go r.pcapReader()
-	go r.probeSweeper()
+	go r.probeSweeper(ctx)
 	defer r.shutdown()
 
 	// timer := time.NewTimer(gammaInterval(r.interval))
@@ -486,7 +487,7 @@ func (r *RTTMonitor) Run() error {
 			r.sendProbe()
 			// timer.Reset(gammaInterval(r.interval))
 
-		case <-r.stop:
+		case <-ctx.Done():
 			timer.Stop()
 			time.Sleep(1 * time.Second)
 			r.sweepProbes(true)

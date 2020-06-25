@@ -1,6 +1,7 @@
 package someta
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/shirou/gopsutil/net"
@@ -67,12 +68,12 @@ func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Du
 }
 
 // Run runs the netstat monitor; this should be invoked in a goroutine
-func (n *NetstatMonitor) Run() error {
+func (n *NetstatMonitor) Run(ctx context.Context) error {
 	ticker := time.NewTicker(n.interval)
 	defer ticker.Stop()
 	for {
 		select {
-		case <-n.stop:
+		case <-ctx.Done():
 			if n.verbose {
 				fmt.Printf("%s stopping\n", n.Name)
 			}
