@@ -5,7 +5,7 @@ Automatic collection of network measurement metadata.
 
 This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
-Current version is 1.1.0.  
+Current version is 1.2.0.  
 
 Building
 --------
@@ -63,16 +63,16 @@ Note that if you are using the rtt monitor with IPv6, you'll need to use comma s
 
 Here's an example with turning on all monitors (io, netstat, cpu, mem, rtt):
 
-    sudo ./someta -M=io,disk0 -M=netstat,en0 -M=cpu -M=me -M=rtt,type=hoplimited,dest=149.43.80.25,maxttl=3,interface=en0 -R 1m -F 20s -f fulltest -l -m 1s -w 2s -v -c "sleep 150"
+    sudo ./someta -M=io,disk0 -M=netstat,en0 -M=cpu -M=me -M=rtt,type=hoplimited,dest=149.43.80.25,maxttl=3,interface=en0 -R 1m -F 20s -f fulltest -m 1s -w 2s -v -c "sleep 150"
 
 Again, type `./someta -h` for a list of command line options and their defaults.
 
 Valid parameters for each standard monitor are:
 
-   * ``-M cpu:interval=X``: set the periodic sampling interval (default 1 sec)
-   * ``-M io:interval=X``: set the periodic sampling interval (default 1 sec)
-   * ``-M mem:interval=X``: set the periodic sampling interval (default 1 sec)
-   * ``-M netstat:interval=X``: set the periodic sampling interval.
+   * ``-M=cpu:interval=X``: set the periodic sampling interval (default 1 sec)
+   * ``-M=io:interval=X``: set the periodic sampling interval (default 1 sec)
+   * ``-M=mem:interval=X``: set the periodic sampling interval (default 1 sec)
+   * ``-M=netstat:interval=X``: set the periodic sampling interval.
 
      Note that the interval time value is parsed by go's `time.parseDuration`
      (https://golang.org/pkg/time/#ParseDuration), so any value must also
@@ -84,9 +84,9 @@ Valid parameters for each standard monitor are:
      For example, to monitor en0's netstat counters
      every 5 seconds:
      
-     * ``-M netstat:interval=5s:en0``
+     * ``-M=netstat:interval=5s:en0``
 
-   * ``-M rtt:interface=IfaceName:rate=R:dest=D:type=ProbeType:maxttl=MaxTTL:proto=Protocol:allhops:constflow``
+   * ``-M=rtt:interface=IfaceName:rate=R:dest=D:type=ProbeType:maxttl=MaxTTL:proto=Protocol:allhops:constflow``
      
      Monitor RTT along a path to destination ``D`` out of interface ``IfaceName``
      with probe rate ``R``.  Probe interval is gamma distributed.  The default
@@ -102,6 +102,10 @@ Valid parameters for each standard monitor are:
      ``allhops``: probe all hops up to maxttl (for hop-limited probes)
 
      ``constflow``: manipulate packet contents to force first 4 bytes of transport header to be constant (to make probes follow a constant path).  This parameter only has an affect on icmp; data are appended to force the checksum to be a constant value.  Note: udp/tcp probes always have const first 4 bytes.
+
+   * ``-M=ss``
+
+     Monitor socket statistics using the `ss` tool (linux only).  Thanks to Ricky Mok (CAIDA) for contributing this module.  
 
 
 Here are some examples:
@@ -124,7 +128,7 @@ Here are some examples:
 
     # An example with using the RTT monitor w/IPv6 (with the dummy command `sleep`).
     # Note that in my example below I used an IPv6 (6-in-4) tunnel interface.
-    $ sudo ./someta -c "sleep 5" -M rtt,dest="2607:f8b0:4006:805::200e",type=hoplimited,interface=he-ipv6,maxttl=6  -v
+    $ sudo ./someta -c "sleep 5" -M=rtt,dest="2607:f8b0:4006:805::200e",type=hoplimited,interface=he-ipv6,maxttl=6  -v
 
 
 Analyzing metadata
