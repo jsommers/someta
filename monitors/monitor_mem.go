@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/shirou/gopsutil/mem"
 	"log"
 	"time"
+
+	"github.com/shirou/gopsutil/mem"
 )
 
 func init() {
@@ -30,22 +31,20 @@ type MemoryMonitor struct {
 	Data []MemoryMetadata `json:"data"`
 }
 
-// Init initialize a MemoryMonitor
-func (m *MemoryMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	m.baseInit(name, verbose, defaultInterval)
+// CheckConfig does some basic sanity checking on the configuration
+func (m *MemoryMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.IntervalDuration < time.Second*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	}
+	if len(conf.Device) > 0 {
+		log.Fatalf("%s: device config inappropriate")
+	}
+}
 
-	intstr, ok := config["interval"]
-	if ok {
-		interval, err := time.ParseDuration(intstr)
-		if err != nil {
-			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
-		}
-		m.interval = interval
-		delete(config, "interval")
-	}
-	if len(config) > 0 {
-		return fmt.Errorf("%s monitor: invalid configuration items present %v", name, config)
-	}
+// Init initialize a MemoryMonitor
+func (m *MemoryMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config MonitorConf) error {
+	m.CheckConfig(name, config)
+	m.baseInit(name, verbose, defaultInterval)
 	return nil
 }
 

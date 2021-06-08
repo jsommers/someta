@@ -6,21 +6,113 @@ import (
 	"log"
 	"math"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 )
 
+// MonitorConf defines a configuration for a monitor
+type MonitorConf struct {
+	Kind             string        // all monitors
+	IntervalDuration time.Duration // all monitors
+	Device           []string      // netstat, io, rtt
+	RttType          string        // rtt
+	Dest             string        // rtt
+	MaxTTL           int           // rtt
+	AllHops          bool          // rtt
+}
+
+// MonitorConfFromStringMap constructs a MonitorConf from a str map from command line
+func MonitorConfFromStringMap(kind string, strconfig map[string]string) (MonitorConf, error) {
+	var conf = MonitorConf{}
+	conf.Kind = kind
+
+	intstr, ok := strconfig["interval"]
+	if ok {
+		interval, err := time.ParseDuration(intstr)
+		if err != nil {
+			return conf, err
+		}
+		conf.IntervalDuration = interval
+		delete(strconfig, "interval")
+	}
+
+	val, ok := strconfig["dest"]
+	if ok {
+		conf.Dest = val
+	}
+	delete(strconfig, "dest")
+
+	val, ok = strconfig["type"]
+	if ok {
+		conf.RttType = val
+		delete(strconfig, "type")
+	}
+
+	val, ok = strconfig["device"]
+	if ok {
+		conf.Device = append(conf.Device, val)
+		delete(strconfig, "device")
+	}
+
+	val, ok = strconfig["interface"]
+	if ok {
+		conf.Device = append(conf.Device, val)
+		delete(strconfig, "interface")
+	}
+
+	val, ok = strconfig["maxttl"]
+	if ok {
+		var err error
+		conf.MaxTTL, err = strconv.Atoi(val)
+		if err != nil {
+			log.Fatalf("%s monitor: parsing maxttl: %v", kind, err)
+		}
+		delete(strconfig, "maxttl")
+	}
+
+	conf.AllHops = true
+	val, ok = strconfig["allhops"]
+	if ok {
+		if conf.RttType == "ping" {
+			log.Fatalf("%s monitor: allhops is incompatible with type=ping\n", kind)
+		}
+		var err error
+		conf.AllHops, err = strconv.ParseBool(val)
+		if err != nil {
+			log.Fatalf("%s monitor: can't parse allhops config: %s : %v\n", kind, val, err)
+		}
+		delete(strconfig, "allhops")
+	}
+
+	val, ok = strconfig["rate"]
+	if ok {
+		rate, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			log.Fatalf("%s monitor: error with rate value: %v\n", kind, err)
+		}
+		conf.IntervalDuration = time.Duration(time.Duration(1000.0/rate) * time.Millisecond)
+		delete(strconfig, "rate")
+	}
+
+	for devname := range strconfig {
+		conf.Device = append(conf.Device, devname)
+	}
+	return conf, nil
+}
+
 // MetadataGenerator is the interface that all metadata sources must adhere to
 type MetadataGenerator interface {
-	Init(string, bool, time.Duration, map[string]string) error
+	Init(string, bool, time.Duration, MonitorConf) error
 	Run(context.Context) error
 	Flush(*json.Encoder) error
+	CheckConfig(string, MonitorConf)
 }
 
 // Monitor encapsulates elements common to all monitors
 type Monitor struct {
 	Name string `json:"name"`
-	Type string `json:"type"`
+	Kind string `json:"type"` // v1.3 change external name to Kind; keep json as type for back compat
 
 	verbose  bool
 	mutex    sync.Mutex
@@ -29,7 +121,7 @@ type Monitor struct {
 
 func (m *Monitor) baseInit(name string, verbose bool, defaultInterval time.Duration) {
 	m.Name = name
-	m.Type = "monitor"
+	m.Kind = "monitor"
 	m.interval = defaultInterval
 }
 

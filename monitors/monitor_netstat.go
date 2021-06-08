@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/shirou/gopsutil/net"
 	"log"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/shirou/gopsutil/net"
 )
 
 func init() {
@@ -33,30 +34,30 @@ type NetstatMonitor struct {
 	ifacesMonitored []string
 }
 
+// CheckConfig does some basic sanity checking on the configuration
+func (n *NetstatMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.IntervalDuration < time.Second*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	}
+
+	for _, devname := range conf.Device {
+		if !intfNames.isValid(devname) {
+			log.Fatalf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(intfNames.all(), ","))
+		}
+	}
+}
+
 // Init initializes a NetstatMonitor
-func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
+func (n *NetstatMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config MonitorConf) error {
+	n.CheckConfig(name, config)
 	n.baseInit(name, verbose, defaultInterval)
 
-	intstr, ok := config["interval"]
-	if ok {
-		interval, err := time.ParseDuration(intstr)
-		if err != nil {
-			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
-		}
-		n.interval = interval
-		delete(config, "interval")
-	}
-
-	for devname := range config {
-		if !intfNames.isValid(devname) {
-			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(intfNames.all(), ","))
-		}
-		n.ifacesMonitored = append(n.ifacesMonitored, devname)
-	}
 	// no device names specified; monitor all devices
-	if len(config) == 0 {
-		n.ifacesMonitored = intfNames.all()
+	if len(config.Device) == 0 {
+		config.Device = intfNames.all()
 	}
+	n.ifacesMonitored = config.Device
+
 	if n.verbose {
 		plural := ""
 		if len(n.ifacesMonitored) > 1 {

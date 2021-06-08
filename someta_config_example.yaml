@@ -1,0 +1,68 @@
+# someta configuration example, yaml style
+someta:
+  # NB: if command is left off, someta will just run indefinitely
+  command: sleep 60
+  outfilebase: metadata
+  verbose: true
+  quiet: false
+  uselogfile: true
+  statusinterval: 5s
+  monitorinterval: 1s
+  metaflushinterval: 10m
+  filerolloverinterval: 1h
+  warmcooltime: 2s
+  cpuaffinity: -1
+# static metadata -- stuff that doesn't really change from run-to-run
+readme: |
+  This is some text that will get included as a README; some general
+  descriptive text to include as metadata.
+staticmeta:
+  extfiles: 
+    - https://someURLwith.data/used/in/this/study
+    - https://anotherURL.with.data/used/in/this/study
+# metadata to include from dynamic system monitoring
+monitors:
+  - 
+    kind: cpu
+    interval: 1s
+  -
+    kind: mem
+    interval: 1s
+  -
+    kind: netstat
+    interval: 1s
+    # NB: leaving off device will cause all interfaces to be monitored
+    device: 
+      - eth0
+      - eth1
+  -
+    kind: rtt
+    interval: 1s
+    rtttype: ping
+    dest: 8.8.8.8
+    device: 
+      - eth0
+    maxttl: 64
+    rate: 2
+    interval: 0.5s
+  -
+    kind: rtt
+    interval: 1s
+    rtttype: hoplimited
+    dest: 8.8.8.8
+    device: 
+      - eth0
+    maxttl: 8
+    allhops: true
+    rate: 2
+    interval: 0.5s
+  - 
+    kind: ss
+    interval: 1s
+  - 
+    kind: io
+    interval: 1s
+    # NB: leaving off device will cause all devices to be monitored
+    device:
+      - /dev/disk0
+      - /dev/disk1

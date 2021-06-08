@@ -32,24 +32,24 @@ type SsMonitor struct {
 	Data []SsMetadata `json:"data"`
 }
 
-// Init initializes an SsMonitor
-func (n *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	n.baseInit(name, verbose, defaultInterval)
-
-	intstr, ok := config["interval"]
-	if ok {
-		interval, err := time.ParseDuration(intstr)
-		if err != nil {
-			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
-		}
-		n.interval = interval
-		delete(config, "interval")
+// CheckConfig does some basic sanity checking on the configuration
+func (c *CPUMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.IntervalDuration < time.Millisecond*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
 	}
 	_, err := exec.LookPath("/bin/ss")
 	if err != nil {
-		return fmt.Errorf("%s monitor: ss command does not exist", name)
+		log.Fatalf("%s monitor: /bin/ss command does not exist", name)
 	}
-	if n.verbose {
+}
+
+// Init initializes an SsMonitor
+func (n *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config MonitorConf) error {
+	s.baseInit(name, verbose, defaultInterval)
+	if err := s.CheckConfig(name, config); err != nil {
+		return err
+	}
+	if s.verbose {
 		log.Printf("%s monitor: monitoring ss\n", name)
 	}
 	return nil

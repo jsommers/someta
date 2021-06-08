@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/shirou/gopsutil/disk"
 	"log"
 	"strings"
 	"time"
+
+	"github.com/shirou/gopsutil/disk"
 )
 
 func init() {
@@ -32,40 +33,43 @@ type IOMonitor struct {
 	disksMonitored []string
 }
 
-// Init initializes an IOMonitor
-func (i *IOMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
-	i.baseInit(name, verbose, defaultInterval)
+// CheckConfig does some basic sanity checking on the configuration
+func (i *IOMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.IntervalDuration < time.Second*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	}
+
+	// get a list of valid device names
 	cmap, err := disk.IOCounters()
 	if err != nil {
 		log.Fatal(err)
 	}
-	var alldevs []string
-	for devname := range cmap {
-		alldevs = append(alldevs, devname)
-	}
 
-	intstr, ok := config["interval"]
-	if ok {
-		interval, err := time.ParseDuration(intstr)
-		if err != nil {
-			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
-		}
-		i.interval = interval
-		delete(config, "interval")
-	}
-
-	for devname := range config {
+	for _, devname := range conf.Device {
 		_, ok := cmap[devname]
 		if !ok {
-			return fmt.Errorf("%s monitor: device %s doesn't exist; valid devices: %s", name, devname, strings.Join(alldevs, ","))
+			log.Fatalf("%s monitor: device %s doesn't exist", name, devname)
 		}
-		i.disksMonitored = append(i.disksMonitored, devname)
+		conf.Device = append(conf.Device, devname)
 	}
-	if len(config) == 0 {
+}
+
+// Init initializes an IOMonitor
+func (i *IOMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config MonitorConf) error {
+	i.CheckConfig(name, config)
+	i.baseInit(name, verbose, defaultInterval)
+
+	if len(config.Device) == 0 {
+		cmap, err := disk.IOCounters()
+		if err != nil {
+			log.Fatal(err)
+		}
 		for devname := range cmap {
-			i.disksMonitored = append(i.disksMonitored, devname)
+			config.Device = append(config.Device, devname)
 		}
 	}
+	i.disksMonitored = config.Device
+
 	if i.verbose {
 		plural := ""
 		if len(i.disksMonitored) > 1 {

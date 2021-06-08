@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/shirou/gopsutil/cpu"
 	"log"
 	"time"
+
+	"github.com/shirou/gopsutil/cpu"
 )
 
 func init() {
@@ -30,21 +31,20 @@ type CPUMonitor struct {
 	Data []CPUMetadata `json:"data"`
 }
 
+// CheckConfig does some basic sanity checking on the configuration
+func (c *CPUMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.IntervalDuration > 0 && conf.IntervalDuration < time.Second*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	}
+	if len(conf.Device) > 0 {
+		log.Fatalf("%s: device config inappropriate", name)
+	}
+}
+
 // Init initializes a CPUMonitor
-func (c *CPUMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
+func (c *CPUMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config MonitorConf) error {
+	c.CheckConfig(name, config)
 	c.baseInit(name, verbose, defaultInterval)
-	intstr, ok := config["interval"]
-	if ok {
-		interval, err := time.ParseDuration(intstr)
-		if err != nil {
-			log.Fatalf("%s monitor: interval specification bad: %v\n", name, err)
-		}
-		c.interval = interval
-		delete(config, "interval")
-	}
-	if len(config) > 0 {
-		return fmt.Errorf("%s monitor: invalid configuration items present %v", name, config)
-	}
 	return nil
 }
 

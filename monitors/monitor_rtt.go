@@ -4,12 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	pkt "github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
-	"golang.org/x/net/icmp"
-	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
 	"io"
 	"log"
 	"net"
@@ -20,6 +14,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	pkt "github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
+	"golang.org/x/net/icmp"
+	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 )
 
 type probe struct {
@@ -96,107 +97,60 @@ type RTTMonitor struct {
 
 var nameRegex *regexp.Regexp
 
+// CheckConfig does some basic sanity checking on the configuration
+func (r *RTTMonitor) CheckConfig(name string, conf MonitorConf) {
+	var err error
+	_, err = net.ResolveIPAddr("ip", conf.Dest)
+	if err != nil {
+		log.Fatalf("%s monitor: couldn't parse destination IP address %s: %v\n", name, conf.Dest, err)
+	}
+
+	if len(conf.Device) != 1 {
+		log.Fatalf("%s monitor: must have exactly 1 device configured but got %d (%s)", name, len(conf.Device), strings.Join(conf.Device, ", "))
+	}
+
+	if !intfNames.isValid(conf.Device[0]) {
+		log.Fatalf(`%s monitor: invalid "interface" name %s; valid names: %s`, name, conf.Device[0], strings.Join(intfNames.all(), ","))
+	}
+
+	if !(conf.RttType == "hoplimited" || conf.RttType == "ping") {
+		log.Fatalf("%s monitor unrecognized probe type %s\n", name, conf.RttType)
+	}
+
+	if conf.RttType == "ping" && conf.MaxTTL != 0 {
+		log.Printf("%s monitor: warning: specifying maxttl for type=ping\n", name)
+	} else if conf.RttType == "hoplimited" {
+		if conf.MaxTTL == 0 {
+			conf.MaxTTL = 64 // default
+		} else if conf.MaxTTL <= 0 {
+			log.Fatalf("%s monitor: invalid value %d for hopcount\n", name, conf.MaxTTL)
+		} else if conf.MaxTTL > 32 {
+			log.Fatalf("%s monitor: maxTTL too big for hop-limited probe", name)
+		}
+	}
+
+	if conf.IntervalDuration < time.Millisecond*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	}
+}
+
 // Init initializes an RTT monitor
-func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config map[string]string) error {
+func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Duration, conf MonitorConf) error {
+	r.CheckConfig(name, conf)
 	r.baseInit(name, verbose, defaultInterval)
 
-	val, ok := config["dest"]
-	if !ok {
-		log.Fatalf(`%s monitor: Need "dest" in RTT monitor configuration`, name)
-	}
-	r.IPDest = val
-	delete(config, "dest")
-
-	var err error
-	r.destIPAddr, err = net.ResolveIPAddr("ip", val)
-	if err != nil {
-		log.Fatalf("%s monitor: couldn't parse destination IP address %s: %v\n", name, val, err)
-	}
-
-	hopLimited := false
-	val, ok = config["type"]
-	if ok {
-		if val == "hoplimited" {
-			hopLimited = true
-		} else if val != "ping" {
-			log.Fatalf("%s monitor unrecognized probe type %s\n", name, val)
-		}
-		delete(config, "type")
-	}
-
+	r.IPDest = conf.Dest
+	r.destIPAddr, _ = net.ResolveIPAddr("ip", conf.Dest) // already validated in CheckConfig
 	if ip4 := r.destIPAddr.IP.To4(); ip4 != nil {
 		r.useV4 = true
 	} else {
 		r.useV4 = false
 	}
 
-	val, ok = config["interface"]
-	if !ok {
-		log.Fatalf(`%s monitor: need "interface" in RTT monitor configuration`, name)
-	}
-	if !intfNames.isValid(val) {
-		log.Fatalf(`%s monitor: invalid "interface" name %s; valid names: %s`, name, val, strings.Join(intfNames.all(), ","))
-	}
-	r.netDev = intfNames.pcapName(val)
-	delete(config, "interface")
-
-	r.MaxTTL = 64
-	val, ok = config["maxttl"]
-	if ok {
-		if !hopLimited {
-			log.Printf("%s monitor: warning: specifying maxttl for type=ping\n", name)
-		}
-		var err error
-		r.MaxTTL, err = strconv.Atoi(val)
-		if err != nil {
-			log.Fatalf("%s monitor: parsing maxttl: %v\n", name, err)
-		}
-		if r.MaxTTL <= 0 || r.MaxTTL > 255 {
-			log.Fatalf("%s monitor: invalid value %d for hopcount\n", name, r.MaxTTL)
-		}
-		if hopLimited && r.MaxTTL > 32 {
-			log.Fatalf("%s monitor: maxTTL too big for hop-limited probe", name)
-		}
-	}
-	delete(config, "maxttl")
-
-	r.ProbeAllHops = true
-	val, ok = config["allhops"]
-	if ok {
-		if !hopLimited {
-			log.Fatalf("%s monitor: allhops is incompatible with type=ping\n", name)
-		}
-		var err error
-		r.ProbeAllHops, err = strconv.ParseBool(val)
-		if err != nil {
-			log.Fatalf("%s monitor: can't parse allhops config: %s : %v\n", name, val, err)
-		}
-	}
-	delete(config, "allhops")
-
-	val, ok = config["rate"]
-	if ok {
-		rate, err := strconv.ParseFloat(val, 64)
-		if err != nil {
-			log.Fatalf("%s monitor: error with probe rate: %v\n", name, err)
-		}
-		r.interval = time.Duration(time.Duration(1000.0/rate) * time.Millisecond)
-	}
-	val, ok = config["interval"]
-	if ok {
-		ival, err := time.ParseDuration(val)
-		if err != nil {
-			log.Fatalf("%s monitor: error with probe rate: %v\n", name, err)
-		}
-		r.interval = ival
-	}
-	delete(config, "rate")
-	delete(config, "interval")
-
-	if len(config) > 0 {
-		log.Fatalf("%s monitor: unhandled configuration: %v\n", name, config)
-	}
-
+	r.netDev = intfNames.pcapName(conf.Device[0])
+	r.MaxTTL = conf.MaxTTL
+	r.ProbeAllHops = conf.AllHops
+	r.interval = conf.IntervalDuration
 	r.nextSequence = 1
 
 	r.localAddrs = make(map[string]net.IP)
@@ -218,7 +172,7 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	r.probeMap[baseIdent] = make(map[int]*probe)
 	r.probeIdents = append(r.probeIdents, baseIdent)
 	r.initialTTLs = append(r.initialTTLs, r.MaxTTL)
-	if hopLimited && r.ProbeAllHops {
+	if conf.RttType == "hoplimited" && r.ProbeAllHops {
 		// for hop-limited:
 		//    maxttl = baseIdent
 		//    maxttl-1 = baseIdent+1
@@ -234,11 +188,7 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 		}
 	}
 	r.Protocol = "icmp"
-	if hopLimited {
-		r.Probetype = "hoplimited"
-	} else {
-		r.Probetype = "ping"
-	}
+	r.Probetype = conf.RttType
 
 	r.pcapSetup() // setup pcap listener (for both v4 and v6)
 	if r.useV4 {
