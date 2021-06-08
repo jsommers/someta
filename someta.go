@@ -188,13 +188,16 @@ func configFileUpdate(exitFatal bool) {
 
 func configureMonitors() {
 	for mName, mCfgSlice := range monCfg.cfg {
-		for idx, mCfg := range mCfgSlice {
+		for idx := range mCfgSlice {
 			var instanceName = mName
 			if len(mCfgSlice) > 1 {
 				instanceName = fmt.Sprintf("%s%d", mName, idx)
 			}
 			mon := someta.GetMonitor(mName)
-			err := mon.Init(instanceName, verboseOutput, monitorInterval, mCfg)
+			if mCfgSlice[idx].Interval == 0 { // default interval
+				mCfgSlice[idx].Interval = monitorInterval
+			}
+			err := mon.Init(instanceName, verboseOutput, monitorInterval, mCfgSlice[idx])
 			if err != nil {
 				log.Fatal(err)
 			}
