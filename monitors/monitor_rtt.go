@@ -99,6 +99,9 @@ var nameRegex *regexp.Regexp
 
 // CheckConfig does some basic sanity checking on the configuration
 func (r *RTTMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.Interval == 0 {
+		conf.Interval = time.Second * 1
+	}
 	var err error
 	_, err = net.ResolveIPAddr("ip", conf.Dest)
 	if err != nil {

@@ -33,11 +33,14 @@ type MemoryMonitor struct {
 
 // CheckConfig does some basic sanity checking on the configuration
 func (m *MemoryMonitor) CheckConfig(name string, conf MonitorConf) {
+	if conf.Interval == 0 {
+		conf.Interval = time.Second * 1
+	}
 	if conf.Interval < time.Second*1 {
 		log.Fatalf("%s: interval %v too short", name, conf.Interval)
 	}
 	if len(conf.Device) > 0 {
-		log.Fatalf("%s: device config inappropriate")
+		log.Fatalf("%s: device config inappropriate", name)
 	}
 }
 
