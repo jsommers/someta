@@ -34,8 +34,8 @@ type SsMonitor struct {
 
 // CheckConfig does some basic sanity checking on the configuration
 func (c *CPUMonitor) CheckConfig(name string, conf MonitorConf) {
-	if conf.IntervalDuration < time.Millisecond*1 {
-		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	if conf.Interval < time.Millisecond*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.Interval)
 	}
 	_, err := exec.LookPath("/bin/ss")
 	if err != nil {

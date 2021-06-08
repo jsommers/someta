@@ -321,6 +321,16 @@ func main() {
 	}
 	if checkConfig {
 		log.Println("Exiting after checking configuration")
+		if verboseOutput {
+			log.Println("Configured monitors: ")
+			for _, mCfgList := range monCfg.cfg {
+				for _, c := range mCfgList {
+					log.Println(c.String())
+				}
+			}
+		} else {
+			log.Println("Use -v to show monitor configuration")
+		}
 		return
 	}
 

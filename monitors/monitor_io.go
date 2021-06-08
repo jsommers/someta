@@ -35,8 +35,8 @@ type IOMonitor struct {
 
 // CheckConfig does some basic sanity checking on the configuration
 func (i *IOMonitor) CheckConfig(name string, conf MonitorConf) {
-	if conf.IntervalDuration < time.Second*1 {
-		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	if conf.Interval < time.Second*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.Interval)
 	}
 
 	// get a list of valid device names

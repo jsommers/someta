@@ -117,9 +117,7 @@ func (r *RTTMonitor) CheckConfig(name string, conf MonitorConf) {
 		log.Fatalf("%s monitor unrecognized probe type %s\n", name, conf.RttType)
 	}
 
-	if conf.RttType == "ping" && conf.MaxTTL != 0 {
-		log.Printf("%s monitor: warning: specifying maxttl for type=ping\n", name)
-	} else if conf.RttType == "hoplimited" {
+	if conf.RttType == "hoplimited" {
 		if conf.MaxTTL == 0 {
 			conf.MaxTTL = 64 // default
 		} else if conf.MaxTTL <= 0 {
@@ -129,8 +127,8 @@ func (r *RTTMonitor) CheckConfig(name string, conf MonitorConf) {
 		}
 	}
 
-	if conf.IntervalDuration < time.Millisecond*1 {
-		log.Fatalf("%s: interval %v too short", name, conf.IntervalDuration)
+	if conf.Interval < time.Millisecond*1 {
+		log.Fatalf("%s: interval %v too short", name, conf.Interval)
 	}
 }
 
@@ -150,7 +148,7 @@ func (r *RTTMonitor) Init(name string, verbose bool, defaultInterval time.Durati
 	r.netDev = intfNames.pcapName(conf.Device[0])
 	r.MaxTTL = conf.MaxTTL
 	r.ProbeAllHops = conf.AllHops
-	r.interval = conf.IntervalDuration
+	r.interval = conf.Interval
 	r.nextSequence = 1
 
 	r.localAddrs = make(map[string]net.IP)

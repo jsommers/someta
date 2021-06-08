@@ -3,23 +3,40 @@ package someta
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 // MonitorConf defines a configuration for a monitor
 type MonitorConf struct {
-	Kind             string        // all monitors
-	IntervalDuration time.Duration // all monitors
-	Device           []string      // netstat, io, rtt
-	RttType          string        // rtt
-	Dest             string        // rtt
-	MaxTTL           int           // rtt
-	AllHops          bool          // rtt
+	Kind     string        // all monitors
+	Interval time.Duration // all monitors
+	Device   []string      // netstat, io, rtt
+	RttType  string        // rtt
+	Dest     string        // rtt
+	MaxTTL   int           // rtt
+	AllHops  bool          // rtt
+}
+
+// String method - a slightly nicer repr of MonitorConf
+func (m *MonitorConf) String() string {
+	outstr := fmt.Sprintf("cfg %s: interval: %v", m.Kind, m.Interval)
+	if m.Kind == "rtt" {
+		outstr += fmt.Sprintf("; %s to %s; maxttl %d", m.RttType, m.Dest, m.MaxTTL)
+		if m.RttType == "hoplimited" {
+			outstr += fmt.Sprintf("; allhops? %v", m.AllHops)
+		}
+	}
+	if m.Kind == "io" || m.Kind == "netstat" { // ugly...
+		outstr += fmt.Sprintf("; devices: %s", strings.Join(m.Device, ", "))
+	}
+	return outstr
 }
 
 // MonitorConfFromStringMap constructs a MonitorConf from a str map from command line
@@ -33,7 +50,7 @@ func MonitorConfFromStringMap(kind string, strconfig map[string]string) (Monitor
 		if err != nil {
 			return conf, err
 		}
-		conf.IntervalDuration = interval
+		conf.Interval = interval
 		delete(strconfig, "interval")
 	}
 
@@ -91,7 +108,7 @@ func MonitorConfFromStringMap(kind string, strconfig map[string]string) (Monitor
 		if err != nil {
 			log.Fatalf("%s monitor: error with rate value: %v\n", kind, err)
 		}
-		conf.IntervalDuration = time.Duration(time.Duration(1000.0/rate) * time.Millisecond)
+		conf.Interval = time.Duration(time.Duration(1000.0/rate) * time.Millisecond)
 		delete(strconfig, "rate")
 	}
 
