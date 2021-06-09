@@ -111,7 +111,7 @@ func init() {
 	flag.Usage = usage
 
 	flag.StringVar(&configFile, "y", "", "Name of YAML configuration file")
-	flag.BoolVar(&checkConfig, "Y", false, "Check config file but don't start metadata collection")
+	flag.BoolVar(&checkConfig, "Y", false, "Check configuration but don't start metadata collection")
 	flag.StringVar(&commandLine, "c", "", "Command line for external measurement program")
 	flag.BoolVar(&verboseOutput, "v", false, "Verbose output")
 	flag.BoolVar(&quietOutput, "q", false, "Quiet output")

@@ -1,6 +1,5 @@
 # someta configuration example, yaml style
 someta:
-  # NB: if command is left off, someta will just run indefinitely
   command: sleep 60
   outfilebase: metadata
   verbose: true

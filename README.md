@@ -5,7 +5,7 @@ Automatic collection of network measurement metadata.
 
 This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
-Current version is 1.2.0.  
+Current version is v1.3.0.  
 
 Building
 --------
@@ -15,6 +15,24 @@ The source tree needs to be downloaded to GOPATH/src/github.com/jsommers.
 You can do this with: `go get github.com/jsommers/someta`.  The development library and headers for `libpcap` will need to be installed for this to successfully complete.  On Debian-variant Linux systems, you can just do `apt install libpcap-dev`.
 
 You can then `cd` to `$GOPATH/src/github.com/jsommers/someta` and type `go build`.  A binary named `someta` will be produced.
+
+
+Configuring
+-----------
+
+SoMeta can be configured using a YAML file.  This method of configuration is new in v1.3.0, and subsumes (nearly) all command-line parameters indicated below.  Configuring via a file allows (1) inclusion of URLs and details of associated data sets used in the measurement task(s), (2) inclusion of README-like details which aren't possible with the command-line, and (3) creation of a configuration template that can easily be reused.
+
+An example configuration is provided in the repo, named `someta_config_example.yaml`.  It should, in general, be self-explanatory (see command-line arguments discussion below for details regarding config parameters for individual monitors).
+
+To start SoMeta with a configuration file, use the `-y` option:
+
+```
+someta -y someta_config_example.yaml
+```
+
+Another useful command-line parameter is `-Y`, which does some simple sanity checks on the configuration and exits prior to starting any monitoring.  This option can be used with or without a yaml configuration.
+
+Note that non-monitor command-line parameters are _overridden_ by config file options.  Note also that any monitor configurations provided on the command-line are _added_ to monitors configured via the yaml file.  It is recommended for your own sanity to just use the configuration file when and where possible and not to mix the two configuration styles.
 
 
 Running
@@ -33,6 +51,7 @@ Usage of ./someta:
         	Select monitors to include. Default=None. Valid monitors=cpu,io,mem,netstat,rtt
       -R duration
         	Time period after which metadata output will rollover to a new file (default 1h0m0s)
+      -Y	Check configuration but don't start metadata collection
       -c string
         	Command line for external measurement program
       -d	Debug output (metadata is written to stdout)
@@ -47,7 +66,8 @@ Usage of ./someta:
       -v	Verbose output
       -w duration
         	Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected (default 1s)
-
+      -y string
+    	        Name of YAML configuration file
 
 The ``-c`` option indicates the "external" measurement tool to start.  By default, 
 SoMeta starts ``sleep 5``, which causes SoMeta simply to collect 5 seconds-worth of
@@ -131,6 +151,13 @@ Here are some examples:
     $ sudo ./someta -c "sleep 5" -M=rtt,dest="2607:f8b0:4006:805::200e",type=hoplimited,interface=he-ipv6,maxttl=6  -v
 
 
+
+Reconfiguring
+-------------
+
+Sending SIGHUP to SoMeta will cause it to re-read its YAML configuration file.  This feature is in progress.
+
+
 Analyzing metadata
 ------------------
 
@@ -201,6 +228,13 @@ Changes from the earlier Python version of SoMeta:
  * There's even more rich data collected about the system when someta starts up
 
 
+v1.3.0
+
+ * Addition of yaml configuration method
+ * Some minor other code cleanup
+ * Documentation update
+
+
 Credits
 -------
 
@@ -212,7 +246,7 @@ Any opinions, findings, and conclusions or recommendations expressed in this mat
 License
 -------
 
-Copyright 2018-19  SoMeta authors.  All rights reserved.
+Copyright 2018-21  SoMeta authors.  All rights reserved.
 
 The SoMeta software is distributed under terms of the GNU General Public License, version 3.  See below for the standard GNU GPL v3 copying text.
 
