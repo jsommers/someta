@@ -46,9 +46,7 @@ func (s *SsMonitor) CheckConfig(name string, conf MonitorConf) {
 // Init initializes an SsMonitor
 func (s *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duration, config MonitorConf) error {
 	s.baseInit(name, verbose, defaultInterval)
-	if err := s.CheckConfig(name, config); err != nil {
-		return err
-	}
+	s.CheckConfig(name, config)
 	if s.verbose {
 		log.Printf("%s monitor: monitoring ss\n", name)
 	}
@@ -84,7 +82,7 @@ func (s *SsMonitor) Run(ctx context.Context) error {
 func (s *SsMonitor) Flush(encoder *json.Encoder) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	err := encoder.Encode(n)
+	err := encoder.Encode(s)
 	s.Data = nil
 	return err
 }
