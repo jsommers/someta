@@ -7,14 +7,12 @@ This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `So
 
 Current version is v1.3.3.  
 
-Building
---------
+Installing
+----------
 
-Two options:
+The easiest way to build and install is to do: `go install github.com/jsommers/someta@latest` (or replace `latest` with a specific version tag).  This command will download and compile all dependencies, and install the `someta` binary in your `$GOPATH/bin` directory.
 
-1.  If you want source code to work with, the source tree needs to be downloaded to `$GOPATH/src/github.com/jsommers`.  You can do this with: `go get github.com/jsommers/someta`.  The development library and headers for `libpcap` will need to be installed for this to successfully complete.  On Debian-variant Linux systems, you can just do `apt install libpcap-dev`.  You can then `cd` to `$GOPATH/src/github.com/jsommers/someta` and type `go build`.  A binary named `someta` will be produced.
-
-2. If you don't need the source code, you can build and install with `go install github.com/jsommers/someta@latest` (or replace `latest` with a specific version tag).  This command will download and compile all dependencies, and install the `someta` binary in your `$GOPATH/bin` directory.
+You can, of course, also clone the source repository and use the `go` toolchain to build, etc.
 
 
 Configuring
