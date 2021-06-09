@@ -5,7 +5,7 @@ Automatic collection of network measurement metadata.
 
 This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
-Current version is v1.3.0.  
+Current version is v1.3.1.  
 
 Building
 --------
@@ -13,6 +13,8 @@ Building
 The source tree needs to be downloaded to GOPATH/src/github.com/jsommers.
 
 You can do this with: `go get github.com/jsommers/someta`.  The development library and headers for `libpcap` will need to be installed for this to successfully complete.  On Debian-variant Linux systems, you can just do `apt install libpcap-dev`.
+
+With recent versions of the `go` toolchain, you also install with `go install github.com/jsommers/someta@latest` (or replace `latest` with a specific version tag).  This command will download and compile all dependencies, and install the `someta` binary in your `$GOPATH/bin` directory.
 
 You can then `cd` to `$GOPATH/src/github.com/jsommers/someta` and type `go build`.  A binary named `someta` will be produced.
 
@@ -67,7 +69,7 @@ Usage of ./someta:
       -w duration
         	Wait time before starting external tool, and wait time after external tool stops, during which metadata are collected (default 1s)
       -y string
-    	        Name of YAML configuration file
+        	Name of YAML configuration file
 
 The ``-c`` option indicates the "external" measurement tool to start.  By default, 
 SoMeta starts ``sleep 5``, which causes SoMeta simply to collect 5 seconds-worth of

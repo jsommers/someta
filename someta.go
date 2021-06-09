@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const sometaVersion = "1.3.0"
+const sometaVersion = "1.3.1"
 
 var verboseOutput = false
 var quietOutput = false
@@ -384,7 +384,7 @@ func main() {
 	for !done {
 		select {
 		case output := <-cmdOutput:
-			log.Println("cmd output outside:", output)
+			log.Println("command output:", output)
 			md.CommandOutput = output
 			done = true
 		case s := <-sigchan:
@@ -394,9 +394,8 @@ func main() {
 				signal.Ignore()
 				done = true
 			} else {
-				// FIXME
-				configFileUpdate(false) // don't exit with fatal error when re-reading config
-				fmt.Println("SIGHUP reset metadata collection")
+				configFileUpdate(false)
+				log.Println("configuration re-read")
 			}
 		case t := <-statusTicker.C:
 			if !quietOutput {
@@ -405,7 +404,7 @@ func main() {
 				log.Printf("after %v cpu idle %3.2f%%\n", diff.Round(time.Second), 100-cpupct[0])
 			}
 		case <-rolloverTicker.C:
-			log.Println("Metadata file rollover")
+			log.Println("metadata file rollover")
 			md.rolloverMetadata()
 		case <-fileFlushTicker.C:
 			flushMonitorMetadata(md.encoder)
