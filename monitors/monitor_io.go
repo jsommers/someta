@@ -45,10 +45,15 @@ func (i *IOMonitor) CheckConfig(name string, conf MonitorConf) {
 		log.Fatal(err)
 	}
 
+	var allDisks []string
+	for devname := range cmap {
+		allDisks = append(allDisks, devname)
+	}
+
 	for _, devname := range conf.Device {
 		_, ok := cmap[devname]
 		if !ok {
-			log.Fatalf("%s monitor: device %s doesn't exist", name, devname)
+			log.Fatalf("%s monitor: device %s doesn't exist (valid disks: %s)", name, devname, strings.Join(allDisks, ","))
 		}
 		conf.Device = append(conf.Device, devname)
 	}
