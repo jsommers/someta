@@ -58,6 +58,7 @@ monitors:
   - 
     kind: ss
     interval: 1s
+    cmdopts: "-iemptba"
   - 
     kind: io
     interval: 1s

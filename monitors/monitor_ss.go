@@ -29,7 +29,8 @@ func NewSsMonitor() MetadataGenerator {
 // SsMonitor collects metadata from the linux ss tool
 type SsMonitor struct {
 	Monitor
-	Data []SsMetadata `json:"data"`
+	SsOptions string       `json:"ssoptions"`
+	Data      []SsMetadata `json:"data"`
 }
 
 // CheckConfig does some basic sanity checking on the configuration
@@ -50,6 +51,11 @@ func (s *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duratio
 	if s.verbose {
 		log.Printf("%s monitor: monitoring ss\n", name)
 	}
+	if config.CmdOpts != "" {
+		s.SsOptions = config.CmdOpts
+	} else {
+		s.SsOptions = "-iemptb" // same as original behavior
+	}
 	return nil
 }
 
@@ -65,7 +71,7 @@ func (s *SsMonitor) Run(ctx context.Context) error {
 			}
 			return nil
 		case t := <-ticker.C:
-			out, err := exec.Command("ss", "-i", "-e", "-m", "-p", "-t", "-b").Output()
+			out, err := exec.Command("ss", s.SsOptions).Output()
 			if err != nil {
 				log.Printf("%s: %v\n", s.Name, err)
 			} else {
