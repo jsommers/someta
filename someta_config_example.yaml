@@ -58,7 +58,8 @@ monitors:
   - 
     kind: ss
     interval: 1s
-    cmdopts: "-iemptba"
+    cmdopts: 
+      - "-iemptba"
   - 
     kind: io
     interval: 1s
@@ -66,3 +67,9 @@ monitors:
     device:
       - /dev/disk0
       - /dev/disk1
+  -
+    kind: cmdlinetool
+    interval: 1s
+    cmdopts:
+      - "/usr/bin/uname"
+      - "-a"

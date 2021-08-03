@@ -22,7 +22,7 @@ type MonitorConf struct {
 	Dest     string        // rtt
 	MaxTTL   int           // rtt
 	AllHops  bool          // rtt
-        CmdOpts  string        // ss, possibly others
+	CmdOpts  []string      // ss, cmdlinetool
 }
 
 // String method - a slightly nicer repr of MonitorConf
