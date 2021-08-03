@@ -5,7 +5,7 @@ Automatic collection of network measurement metadata.
 
 This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
-Current version is v1.3.3.  
+Current version is v1.3.4.  
 
 Installing
 ----------
