@@ -51,7 +51,7 @@ func (s *SsMonitor) Init(name string, verbose bool, defaultInterval time.Duratio
 	if s.verbose {
 		log.Printf("%s monitor: monitoring ss\n", name)
 	}
-	if config.CmdOpts != "" {
+	if config.CmdOpts[0] != "" {
 		s.SsOptions = config.CmdOpts[0]
 	} else {
 		s.SsOptions = "-iemptb" // same as original behavior
