@@ -33,6 +33,20 @@ type IOMonitor struct {
 	disksMonitored []string
 }
 
+// DefaultConfig returns a default config or nil if no default
+func (i *IOMonitor) DefaultConfig() *MonitorConf {
+	var disks []string
+	statmap, _ := disk.IOCounters()
+	for name := range statmap {
+		disks = append(disks, name)
+	}
+	conf := &MonitorConf{Kind: "io",
+		Interval: 1 * time.Second,
+		Device:   disks,
+	}
+	return conf
+}
+
 // CheckConfig does some basic sanity checking on the configuration
 func (i *IOMonitor) CheckConfig(name string, conf MonitorConf) {
 	if conf.Interval < time.Second*1 {

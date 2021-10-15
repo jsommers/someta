@@ -97,6 +97,24 @@ type RTTMonitor struct {
 
 var nameRegex *regexp.Regexp
 
+// DefaultConfig returns a default config or nil if no default
+func (r *RTTMonitor) DefaultConfig() *MonitorConf {
+	var ifnames []string
+	ifstatslice, _ := net.Interfaces()
+	for _, ifstat := range ifstatslice {
+		ifnames = append(ifnames, ifstat.Name)
+	}
+	conf := &MonitorConf{Kind: "rtt",
+		Interval: 1 * time.Second,
+		Device:   ifnames,
+		RttType:  "ping/hoplimited",
+		Dest:     "0.0.0.0",
+		MaxTTL:   64,
+		AllHops:  true,
+	}
+	return conf
+}
+
 // CheckConfig does some basic sanity checking on the configuration
 func (r *RTTMonitor) CheckConfig(name string, conf MonitorConf) {
 	var err error

@@ -18,14 +18,14 @@ import (
 	"time"
 
 	someta "github.com/jsommers/someta/monitors"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/host"
-	"github.com/shirou/gopsutil/mem"
-	"github.com/shirou/gopsutil/net"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/net"
 	"gopkg.in/yaml.v2"
 )
 
-const sometaVersion = "1.3.3"
+const sometaVersion = "1.4.0"
 
 var verboseOutput = false
 var quietOutput = false
@@ -104,6 +104,7 @@ var fileFlushInterval = 10 * time.Minute
 var fileRolloverInterval = 1 * time.Hour
 var configFile = ""
 var checkConfig = false
+var createConfig = false
 
 func init() {
 	monCfg.cfg = make(map[string]([]someta.MonitorConf))
@@ -125,6 +126,7 @@ func init() {
 	flag.Var(monCfg, "M", fmt.Sprintf("Select monitors to include. Default=None. Valid monitors=%s", strings.Join(someta.Monitors(), ",")))
 	flag.DurationVar(&fileFlushInterval, "F", 10*time.Minute, "Time period after which in-memory metadata will be flushed to file")
 	flag.DurationVar(&fileRolloverInterval, "R", 1*time.Hour, "Time period after which metadata output will rollover to a new file")
+	flag.BoolVar(&createConfig, "I", false, "Create a new configuration file and exit")
 }
 
 // SometaConf defines a someta system configuration
@@ -148,6 +150,49 @@ type SometaConf struct {
 		ExtFiles []string
 	}
 	Monitors []someta.MonitorConf
+}
+
+func dumpConfig() {
+	var conf SometaConf
+
+	hostInfoStat, _ := host.Info()
+
+	conf.Someta.Command = commandLine
+	conf.Someta.Outfilebase = fmt.Sprintf("%s_%s",
+		hostInfoStat.Hostname, outfileBase)
+	conf.Someta.Verbose = verboseOutput
+	conf.Someta.Quiet = quietOutput
+	conf.Someta.Debug = debugOutput
+	conf.Someta.UseLogfile = logfileOutput
+	conf.Someta.StatusInterval = statusInterval
+	conf.Someta.MonitorInterval = monitorInterval
+	conf.Someta.MetaFlushInterval = fileFlushInterval
+	conf.Someta.FileRolloverInterval = fileRolloverInterval
+	conf.Someta.WarmCoolTime = warmCool
+	conf.Someta.CPUAffinity = cpuAffinity
+
+	if len(monCfg.cfg) == 0 {
+		for _, monName := range someta.Monitors() {
+			mon := someta.GetMonitor(monName)
+			monConfig := mon.DefaultConfig()
+			if monConfig != nil {
+				conf.Monitors = append(conf.Monitors, *monConfig)
+			}
+		}
+	} else {
+		for _, monConfigSlice := range monCfg.cfg {
+			for _, monConfig := range monConfigSlice {
+				conf.Monitors = append(conf.Monitors, monConfig)
+			}
+		}
+	}
+
+	d, err := yaml.Marshal(&conf)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(d))
 }
 
 func configFileUpdate(exitFatal bool) {
@@ -319,6 +364,13 @@ func main() {
 	}
 
 	configureMonitors() // side effect: modify monitors map
+
+	// if we are just bootstrapping a new config file, dump it and exit
+	if createConfig {
+		dumpConfig()
+		os.Exit(0)
+	}
+
 	if len(monitors) == 0 {
 		log.Fatalln("No monitors configured; exiting.")
 	}

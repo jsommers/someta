@@ -5,7 +5,7 @@ Automatic collection of network measurement metadata.
 
 This is a complete rewrite of SoMeta in go.  The earlier (Python) version of `SoMeta` can be found at https://github.com/jsommers/metameasurement.
 
-Current version is v1.3.6.
+Current version is v1.4.0.
 
 Installing
 ----------
@@ -21,6 +21,8 @@ Configuring
 SoMeta can be configured using a YAML file.  This method of configuration is new in v1.3, and subsumes (nearly) all command-line parameters indicated below.  Configuring via a file allows (1) inclusion of URLs and details of associated data sets used in the measurement task(s), (2) inclusion of README-like details which aren't possible with the command-line, and (3) creation of a configuration template that can easily be reused.
 
 An example configuration is provided in the repo, named `someta_config_example.yaml`.  It should, in general, be self-explanatory (see command-line arguments discussion below for details regarding config parameters for individual monitors).
+
+You can also create a new yaml config using the `-I` option.  Any command-line flags to change defaults or to configure monitors will be parsed and included in the generated config, which will be written to stdout.  (New in v1.4.0.)
 
 To start SoMeta with a configuration file, use the `-y` option:
 
@@ -231,6 +233,11 @@ v1.3
  * Addition of yaml configuration method
  * Some minor other code cleanup
  * Documentation update
+ * Addition of commandlinetool monitor, which subsumes the contributed ss monitor
+
+v1.4
+
+ * Addition of -I flag to create a new config and dump to stdout
 
 
 Credits

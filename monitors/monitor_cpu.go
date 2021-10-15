@@ -31,6 +31,13 @@ type CPUMonitor struct {
 	Data []CPUMetadata `json:"data"`
 }
 
+// DefaultConfig returns a default config or nil if no default
+func (c *CPUMonitor) DefaultConfig() *MonitorConf {
+	conf := &MonitorConf{Kind: "cpu",
+		Interval: 1 * time.Second}
+	return conf
+}
+
 // CheckConfig does some basic sanity checking on the configuration
 func (c *CPUMonitor) CheckConfig(name string, conf MonitorConf) {
 	if conf.Interval < time.Second*1 {

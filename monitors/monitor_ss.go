@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package someta
@@ -31,6 +32,11 @@ type SsMonitor struct {
 	Monitor
 	SsOptions string       `json:"ssoptions"`
 	Data      []SsMetadata `json:"data"`
+}
+
+// DefaultConfig returns a default config or nil if no default
+func (s *SsMonitor) DefaultConfig() *MonitorConf {
+	return nil
 }
 
 // CheckConfig does some basic sanity checking on the configuration

@@ -31,6 +31,11 @@ type CmdLineToolMonitor struct {
 	Data               []CmdLineToolMetadata `json:"data"`
 }
 
+// DefaultConfig returns a default config or nil if no default
+func (c *CmdLineToolMonitor) DefaultConfig() *MonitorConf {
+	return nil
+}
+
 // CheckConfig does some basic sanity checking on the configuration
 func (c *CmdLineToolMonitor) CheckConfig(name string, conf MonitorConf) {
 	if conf.Interval < time.Millisecond*1 {

@@ -125,6 +125,7 @@ type MetadataGenerator interface {
 	Run(context.Context) error
 	Flush(*json.Encoder) error
 	CheckConfig(string, MonitorConf)
+	DefaultConfig() *MonitorConf
 }
 
 // Monitor encapsulates elements common to all monitors

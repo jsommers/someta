@@ -64,7 +64,7 @@ func TestConfig(t *testing.T) {
 		t.Log("bad cpu affinity", smConf.Someta.CPUAffinity)
 		t.Fail()
 	}
-	if len(smConf.Monitors) != 7 {
+	if len(smConf.Monitors) != 8 {
 		t.Log("wrong number of monitors found", len(smConf.Monitors))
 		t.Fail()
 	}

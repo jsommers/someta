@@ -31,6 +31,13 @@ type MemoryMonitor struct {
 	Data []MemoryMetadata `json:"data"`
 }
 
+// DefaultConfig returns a default config or nil if no default
+func (m *MemoryMonitor) DefaultConfig() *MonitorConf {
+	conf := &MonitorConf{Kind: "mem",
+		Interval: 1 * time.Second}
+	return conf
+}
+
 // CheckConfig does some basic sanity checking on the configuration
 func (m *MemoryMonitor) CheckConfig(name string, conf MonitorConf) {
 	if conf.Interval < time.Second*1 {

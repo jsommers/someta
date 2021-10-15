@@ -34,6 +34,20 @@ type NetstatMonitor struct {
 	ifacesMonitored []string
 }
 
+// DefaultConfig returns a default config or nil if no default
+func (n *NetstatMonitor) DefaultConfig() *MonitorConf {
+	var ifnames []string
+	ifstatslice, _ := net.Interfaces()
+	for _, ifstat := range ifstatslice {
+		ifnames = append(ifnames, ifstat.Name)
+	}
+	conf := &MonitorConf{Kind: "netstat",
+		Interval: 1 * time.Second,
+		Device:   ifnames,
+	}
+	return conf
+}
+
 // CheckConfig does some basic sanity checking on the configuration
 func (n *NetstatMonitor) CheckConfig(name string, conf MonitorConf) {
 	if conf.Interval < time.Second*1 {
