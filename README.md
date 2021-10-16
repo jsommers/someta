@@ -22,7 +22,7 @@ SoMeta can be configured using a YAML file.  This method of configuration is new
 
 An example configuration is provided in the repo, named `someta_config_example.yaml`.  It should, in general, be self-explanatory (see command-line arguments discussion below for details regarding config parameters for individual monitors).
 
-You can also create a new yaml config using the `-I` option.  Any command-line flags to change defaults or to configure monitors will be parsed and included in the generated config, which will be written to stdout.  (New in v1.4.0.)
+You can also create a new yaml config using the `-I` option.  Any command-line flags to change defaults or to configure monitors will be parsed and included in the generated config, which will be written to stdout.  The `-c` (command) option is required; if any monitors are configured (through `-M` command-line arguments), those configurations will be included in the generated yaml, but if _no_ monitors are configured, default configurations for _all_ monitors will be included in the generated yaml. (New in v1.4.0.)
 
 To start SoMeta with a configuration file, use the `-y` option:
 
@@ -233,7 +233,7 @@ v1.3
  * Addition of yaml configuration method
  * Some minor other code cleanup
  * Documentation update
- * Addition of commandlinetool monitor, which subsumes the contributed ss monitor
+ * Addition of `commandlinetool` monitor, which subsumes the contributed `ss` monitor
 
 v1.4
 
