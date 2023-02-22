@@ -25,7 +25,7 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const sometaVersion = "1.4.0"
+const sometaVersion = "1.4.1"
 
 var verboseOutput = false
 var quietOutput = false
