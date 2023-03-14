@@ -1,5 +1,6 @@
 import json
 import pandas as pd
+import re
 
 def _read_cpu(lineinfo):
     df = pd.DataFrame(lineinfo['data'])
@@ -48,6 +49,12 @@ def _read_rtt(lineinfo):
     df['wirerecv'] = pd.to_datetime(df['wirerecv'], errors='coerce')
     return df
 
+def _strip_digits(s):
+    obj = re.match('^([a-zA-Z]+)\d*$', s)
+    if obj:
+        return obj.groups()[0]
+    return s
+
 def read_someta(filename):
     '''
     read_someta(filename) -> dict of pandas.DataFrame objects
@@ -67,9 +74,10 @@ def read_someta(filename):
             if name == 'someta':
                 dfdict[name] = lineinfo
             else:
-                fn = globals().get('_read_{}'.format(name), None)
+                nodigits = _strip_digits(name)
+                fn = globals().get('_read_{}'.format(nodigits), None)
                 if fn is None:
-                    print("Don't know how to handle {} metadata".format(name))
+                    print("Don't know how to handle {} metadata".format(nodigits))
                     print("Ignoring and continuing...")
                     continue
                     
